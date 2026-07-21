@@ -263,6 +263,8 @@ async function loadEmployeeInfo() {
         return;
       }
       user = resData;
+    }
+
     if (user && user.role === 'admin') {
       window.location.href = '/admin.html';
       return;
@@ -1024,7 +1026,6 @@ async function handleAdminSettingsSubmit(e) {
       loadAdminHeaderInfo();
     } else {
       showToast(data.message || 'فشل تعديل البيانات.', 'danger');
-    }
     }
   } catch (err) {
     showToast('خطأ في الاتصال بالخادم.', 'danger');
