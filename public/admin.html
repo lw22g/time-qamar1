@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>لوحة المدير العام | نظام الحضور والانصراف</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header>
+    <div class="container header-content">
+      <div class="logo-section">
+        <div class="logo-icon">💼</div>
+        <div class="logo-text">لوحة التحكم للمدير العام</div>
+      </div>
+      <div class="user-info-bar">
+        <button id="theme-toggle-btn" class="theme-toggle-btn">☀️ المظهر الفاتح</button>
+        <span id="admin-display-name" style="font-weight: 600; color: var(--warning);">المدير العام</span>
+        <button id="logout-btn" class="btn btn-secondary btn-sm" style="padding: 6px 12px; font-size: 13px;">خروج</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" style="margin-top: 30px; flex: 1;">
+    <!-- System General Stats Row -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-icon primary">👥</div>
+        <div class="stat-info">
+          <span class="stat-label">إجمالي الموظفين</span>
+          <span id="admin-stat-employees" class="stat-value">0</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon success">✅</div>
+        <div class="stat-info">
+          <span class="stat-label">المتواجدون اليوم</span>
+          <span id="admin-stat-present" class="stat-value">0</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon warning">💻</div>
+        <div class="stat-info">
+          <span class="stat-label">الأجهزة المصرح بها</span>
+          <span id="admin-stat-devices" class="stat-value">0 / 3</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="tab-container">
+      <button class="tab-btn active" onclick="switchTab('logs-tab')">📅 سجلات الحضور والانصراف</button>
+      <button class="tab-btn" onclick="switchTab('employees-tab')">👥 إدارة الموظفين</button>
+      <button class="tab-btn" onclick="switchTab('notifications-tab')">🎁 المكافآت والتنبيهات</button>
+      <button class="tab-btn" onclick="switchTab('devices-tab')">💻 الأجهزة المصرحة</button>
+      <button class="tab-btn" onclick="switchTab('settings-tab')">⚙️ إعدادات الحساب</button>
+    </div>
+
+    <!-- Tab 1: Attendance Logs -->
+    <div id="logs-tab" class="tab-pane active glass-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
+        <h3 style="font-size: 18px;">سجل الحضور والانصراف العام لجميع الموظفين</h3>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <select id="employee-filter-select" class="form-control" style="padding: 8px 16px; font-size: 14px; width: 220px;">
+            <option value="">-- كل الموظفين --</option>
+          </select>
+          <input type="text" id="log-search-input" class="form-control" placeholder="البحث بالتاريخ..." style="padding: 8px 16px; font-size: 14px; width: 200px;">
+          <button onclick="exportLogsToCSV()" class="btn btn-secondary" style="padding: 8px 16px; font-size: 14px;">📊 تصدير Excel/CSV</button>
+        </div>
+      </div>
+
+      <!-- Individual Employee Summary Stats Box (shown only when an employee is selected) -->
+      <div id="employee-summary-box" style="display: none; margin-bottom: 20px; padding: 15px; background: rgba(59, 130, 246, 0.05); border: 1px solid var(--border-color); border-radius: var(--radius-md); display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px;">
+        <div style="text-align: center; border-left: 1px solid var(--border-color); padding: 5px;">
+          <span style="font-size: 12px; color: var(--text-secondary); display: block;">أيام الحضور</span>
+          <strong id="emp-sum-days" style="font-size: 18px; color: var(--primary);">0</strong>
+        </div>
+        <div style="text-align: center; border-left: 1px solid var(--border-color); padding: 5px;">
+          <span style="font-size: 12px; color: var(--text-secondary); display: block;">ساعات العمل</span>
+          <strong id="emp-sum-hours" style="font-size: 18px; color: var(--success);">0 ساعة</strong>
+        </div>
+        <div style="text-align: center; border-left: 1px solid var(--border-color); padding: 5px;">
+          <span style="font-size: 12px; color: var(--text-secondary); display: block;">إجمالي التأخير</span>
+          <strong id="emp-sum-lateness" style="font-size: 18px; color: var(--danger);">0 دقيقة</strong>
+        </div>
+        <div style="text-align: center; padding: 5px;">
+          <span style="font-size: 12px; color: var(--text-secondary); display: block;">ساعات إضافية</span>
+          <strong id="emp-sum-overtime" style="font-size: 18px; color: var(--info);">0 دقيقة</strong>
+        </div>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>اسم الموظف</th>
+              <th>التاريخ</th>
+              <th>وقت الحضور</th>
+              <th>التأخير</th>
+              <th>وقت الانصراف</th>
+              <th>الإضافي</th>
+              <th>ساعات العمل</th>
+              <th>الحالة</th>
+            </tr>
+          </thead>
+          <tbody id="all-logs-table-body">
+            <tr>
+              <td colspan="8" style="text-align: center; padding: 20px;">جاري تحميل سجلات الحضور...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tab 2: Employee Management -->
+    <div id="employees-tab" class="tab-pane glass-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h3 style="font-size: 18px;">قائمة حسابات الموظفين المسجلين</h3>
+        <button class="btn btn-primary" onclick="openEmployeeModal()">➕ إضافة موظف جديد</button>
+      </div>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>الاسم الكامل</th>
+              <th>اسم المستخدم</th>
+              <th>تعديل</th>
+              <th>حذف الحساب</th>
+            </tr>
+          </thead>
+          <tbody id="employees-table-body">
+            <tr>
+              <td colspan="4" style="text-align: center; padding: 20px;">جاري تحميل حسابات الموظفين...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tab 3: Notifications & Rewards -->
+    <div id="notifications-tab" class="tab-pane glass-card">
+      <div class="dashboard-grid">
+        <!-- Right Section: Send Form -->
+        <div style="border-left: 1px solid var(--border-color); padding-left: 20px;">
+          <h3 style="font-size: 18px; margin-bottom: 20px;">إرسال مكافأة مالية أو تنبيه للموظف</h3>
+          <form id="send-notification-form">
+            <div class="form-group">
+              <label for="notif-user-select">اختر الموظف:</label>
+              <select id="notif-user-select" class="form-control" required>
+                <option value="">-- اختر موظفاً --</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="notif-type">نوع الإشعار:</label>
+              <select id="notif-type" class="form-control" required onchange="toggleAmountField()">
+                <option value="reward">🎁 مكافأة مالية</option>
+                <option value="warning">⚠️ تنبيه/تحذير رسمي</option>
+              </select>
+            </div>
+            <div class="form-group" id="amount-group">
+              <label for="notif-amount">قيمة المكافأة (بالدولار/العملة المحلية):</label>
+              <input type="number" id="notif-amount" class="form-control" placeholder="مثال: 50" min="1">
+            </div>
+            <div class="form-group">
+              <label for="notif-message">محتوى الرسالة/التفاصيل:</label>
+              <textarea id="notif-message" class="form-control" placeholder="اكتب تفاصيل المكافأة أو التنبيه هنا..." rows="4" required></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">إرسال الآن</button>
+          </form>
+        </div>
+
+        <!-- Left Section: Sent history -->
+        <div>
+          <h3 style="font-size: 18px; margin-bottom: 20px;">السجل الأخير للجوائز والتنبيهات المرسلة</h3>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>الموظف</th>
+                  <th>النوع</th>
+                  <th>الرسالة</th>
+                  <th>التاريخ</th>
+                </tr>
+              </thead>
+              <tbody id="sent-notifications-table-body">
+                <tr>
+                  <td colspan="4" style="text-align: center; padding: 20px;">جاري تحميل سجل الإشعارات...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 4: Device Management -->
+    <div id="devices-tab" class="tab-pane glass-card">
+      <h3 style="font-size: 18px; margin-bottom: 10px;">إدارة الأجهزة المصرح لها بالوصول للشبكة</h3>
+      <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 20px;">
+        يسمح النظام بحد أقصى بـ <strong>3 أجهزة</strong> بالاتصال والمزامنة لضمان تشغيل النظام من حواسيب الشركة فقط. يمكنك إلغاء ترخيص أي جهاز نشط هنا لإتاحة الفرصة لجهاز جديد.
+      </p>
+      
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>اسم الحاسوب</th>
+              <th>تاريخ التفويض</th>
+              <th>آخر ظهور ونشاط</th>
+              <th>إلغاء الترخيص</th>
+            </tr>
+          </thead>
+          <tbody id="devices-table-body">
+            <tr>
+              <td colspan="4" style="text-align: center; padding: 20px;">جاري تحميل قائمة الأجهزة...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tab 5: Account Settings -->
+    <div id="settings-tab" class="tab-pane glass-card">
+      <h3 style="font-size: 18px; margin-bottom: 20px;">تحديث بيانات حساب المدير العام</h3>
+      <form id="admin-settings-form" style="max-width: 450px;">
+        <div class="form-group">
+          <label for="admin-name-input">اسم المدير الكامل:</label>
+          <input type="text" id="admin-name-input" class="form-control" required autocomplete="name">
+        </div>
+        <div class="form-group">
+          <label for="admin-user-input">اسم مستخدم المدير الجديد:</label>
+          <input type="text" id="admin-user-input" class="form-control" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="admin-pass-input">رمز مرور المدير الجديد:</label>
+          <input type="password" id="admin-pass-input" class="form-control" required autocomplete="new-password">
+        </div>
+        <button type="submit" class="btn btn-primary" style="margin-top: 10px;">حفظ التغييرات</button>
+      </form>
+    </div>
+  </main>
+
+  <!-- Modal for Creating/Editing Employee -->
+  <div id="employee-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modal-title">إضافة موظف جديد</h3>
+        <button class="close-btn" onclick="closeEmployeeModal()">&times;</button>
+      </div>
+      <form id="employee-form">
+        <div class="modal-body">
+          <input type="hidden" id="employee-id">
+          <div class="form-group">
+            <label for="employee-name">اسم الموظف الكامل:</label>
+            <input type="text" id="employee-name" class="form-control" placeholder="مثال: أحمد عبد الله محمد" required>
+          </div>
+          <div class="form-group">
+            <label for="employee-username">اسم المستخدم:</label>
+            <input type="text" id="employee-username" class="form-control" placeholder="اسم مستخدم فريد لتسجيل الدخول" required autocomplete="username">
+          </div>
+          <div class="form-group">
+            <label for="employee-password" id="password-label">رمز المرور:</label>
+            <input type="password" id="employee-password" class="form-control" placeholder="أدخل رمز مرور الموظف" required autocomplete="new-password">
+            <span id="password-help" style="font-size: 11px; color: var(--text-muted); display: none;">اترك هذا الحقل فارغاً إذا كنت لا ترغب بتغيير رمز المرور الحالي.</span>
+          </div>
+          <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div>
+              <label for="employee-shift-start">الحضور الرسمي:</label>
+              <input type="time" id="employee-shift-start" class="form-control" value="08:00" required>
+            </div>
+            <div>
+              <label for="employee-shift-end">الانصراف الرسمي:</label>
+              <input type="time" id="employee-shift-end" class="form-control" value="17:00" required>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeEmployeeModal()">إلغاء</button>
+          <button type="submit" class="btn btn-primary">حفظ الموظف</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <footer style="margin-top: auto; padding: 20px 0; text-align: center; font-size: 12px; color: var(--text-muted); border-top: 1px solid var(--border-color);">
+    نظام الحضور والانصراف الذكي &copy; 2026 - مخصص لحواسيب الشركة فقط
+  </footer>
+
+  <div id="toast-el" class="toast">
+    <span id="toast-text"></span>
+  </div>
+
+  <script src="/js/config.js"></script>
+  <script src="/js/app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      initAdminDashboard();
+    });
+  </script>
+</body>
+</html>
