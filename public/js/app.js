@@ -77,7 +77,7 @@ async function sendApiRequest(action, payload = {}, pathUrl = '', method = 'GET'
       case 'change_admin_password': resData = await dbChangeAdminCredentials(payload); break;
       default: break;
     }
-    if (resData) return { ok: true, ...resData };
+    if (resData) return { ok: resData.success !== false, ...resData };
   }
 
   if (typeof GOOGLE_SCRIPT_URL !== 'undefined' && GOOGLE_SCRIPT_URL) {
@@ -92,7 +92,7 @@ async function sendApiRequest(action, payload = {}, pathUrl = '', method = 'GET'
       body: JSON.stringify({ action, payload })
     });
     const data = await res.json();
-    return { ok: true, ...data };
+    return { ok: data.success !== false, ...data };
   } else {
     const isPost = method === 'POST' || (payload && Object.keys(payload).length > 0 && method !== 'GET');
     const options = {
@@ -159,7 +159,7 @@ if (loginForm) {
     try {
       const data = await sendApiRequest('login', { username, password }, '/api/auth/login', 'POST');
 
-      if (data.success || data.ok) {
+      if (data.success && data.role) {
         sessionStorage.setItem('time_user', JSON.stringify({
           id: data.user ? data.user.id : (data.role === 'admin' ? 'admin' : username),
           name: data.name || (data.user ? data.user.name : 'المستخدم'),
