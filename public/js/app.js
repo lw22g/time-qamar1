@@ -53,8 +53,33 @@ document.addEventListener('DOMContentLoaded', () => {
   initTheme();
 });
 
-// Universal API Dispatcher supporting Google Sheets Webhook and Node Backend
+// Universal API Dispatcher supporting Supabase Cloud, Google Sheets Webhook, and Node Backend
 async function sendApiRequest(action, payload = {}, pathUrl = '', method = 'GET') {
+  if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL && SUPABASE_URL.includes('.supabase.co') && !SUPABASE_URL.includes('YOUR_SUPABASE')) {
+    var resData = null;
+    switch (action) {
+      case 'login': resData = await dbLogin(payload.username, payload.password); break;
+      case 'device_status': resData = await dbCheckDeviceStatus(); break;
+      case 'authorize_device': resData = await dbAuthorizeDevice(payload.name, payload.password); break;
+      case 'check_in': resData = await dbCheckIn(payload.userId); break;
+      case 'check_out': resData = await dbCheckOut(payload.userId); break;
+      case 'my_logs': resData = await dbGetMyLogs(payload.userId); break;
+      case 'my_notifications': resData = await dbGetMyNotifications(payload.userId); break;
+      case 'admin_employees': resData = await dbGetAdminEmployees(); break;
+      case 'create_employee': resData = await dbCreateEmployee(payload); break;
+      case 'update_employee': resData = await dbUpdateEmployee(payload); break;
+      case 'delete_employee': resData = await dbDeleteEmployee(payload.id); break;
+      case 'admin_attendance': resData = await dbGetAdminAttendance(); break;
+      case 'send_notification': resData = await dbSendNotification(payload); break;
+      case 'admin_notifications_list': resData = await dbGetAdminNotifications(); break;
+      case 'admin_devices': resData = await dbGetAuthorizedDevices(); break;
+      case 'revoke_device': resData = await dbRevokeDevice(payload.token); break;
+      case 'change_admin_password': resData = await dbChangeAdminCredentials(payload); break;
+      default: break;
+    }
+    if (resData) return { ok: true, ...resData };
+  }
+
   if (typeof GOOGLE_SCRIPT_URL !== 'undefined' && GOOGLE_SCRIPT_URL) {
     const activeUser = JSON.parse(sessionStorage.getItem('time_user') || 'null');
     if (activeUser) {
@@ -245,6 +270,9 @@ async function loadEmployeeInfo() {
         return;
       }
       user = resData;
+    if (user && user.role === 'admin') {
+      window.location.href = '/admin.html';
+      return;
     }
     
     document.getElementById('user-display-name').innerText = `أهلاً بك، ${user.name}`;
@@ -487,6 +515,10 @@ async function loadAdminHeaderInfo() {
       user = JSON.parse(sessionStorage.getItem('time_user') || 'null');
     } else {
       user = await sendApiRequest('get_me', {}, '/api/auth/me');
+    }
+    if (!user || user.role !== 'admin') {
+      window.location.href = '/';
+      return;
     }
     if (user && user.name) {
       const nameEl = document.getElementById('admin-display-name');

@@ -12,8 +12,13 @@ function showToast(message, type = 'success') {
   }, 4000);
 }
 
-// API Dispatcher supporting Google Sheets Webhook and Node Backend
+// API Dispatcher supporting Supabase Cloud, Google Sheets Webhook, and Node Backend
 async function sendApiRequest(action, payload = {}, pathUrl = '') {
+  if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL && SUPABASE_URL.includes('.supabase.co') && !SUPABASE_URL.includes('YOUR_SUPABASE')) {
+    if (action === 'device_status') return await dbCheckDeviceStatus();
+    if (action === 'authorize_device') return await dbAuthorizeDevice(payload.name, payload.password);
+  }
+
   if (typeof GOOGLE_SCRIPT_URL !== 'undefined' && GOOGLE_SCRIPT_URL) {
     const res = await fetch(GOOGLE_SCRIPT_URL, {
       method: 'POST',
