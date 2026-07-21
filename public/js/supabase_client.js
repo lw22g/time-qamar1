@@ -1,5 +1,5 @@
 // ==============================================================================
-// Supabase Client Integration Layer for Qamar Al-Khaleej Attendance System
+// Supabase Client Integration Layer with Google Sheets Auto-Sync
 // ==============================================================================
 
 var _supabaseClient = null;
@@ -22,6 +22,21 @@ function formatMinsText(totalMins) {
   var hours = Math.floor(totalMins / 60);
   var mins = totalMins % 60;
   return String(hours).padStart(2, '0') + ":" + String(mins).padStart(2, '0');
+}
+
+// Background sync to Google Sheets (Parallel backup)
+function syncToGoogleSheets(action, payload) {
+  if (typeof GOOGLE_SCRIPT_URL !== 'undefined' && GOOGLE_SCRIPT_URL) {
+    try {
+      fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: action, payload: payload })
+      }).catch(function(e) { console.warn('Google Sheets background sync notice:', e); });
+    } catch (e) {
+      console.warn('Google Sheets sync notice:', e);
+    }
+  }
 }
 
 // 1. Login Authentication
@@ -93,14 +108,17 @@ async function dbAuthorizeDevice(name, password) {
   }
 
   var token = crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36).substring(2) + Date.now().toString(36));
-  var { error } = await sb.from('devices').insert([{
+  var payload = {
     token: token,
     name: name || 'حاسوب مفعّل',
     authorized_at: new Date().toISOString(),
     last_used: new Date().toISOString()
-  }]);
+  };
 
+  var { error } = await sb.from('devices').insert([payload]);
   if (error) return { success: false, message: error.message };
+
+  syncToGoogleSheets('authorize_device', { name, password, token });
   return { success: true, message: 'تم تفويض الجهاز بنجاح.' };
 }
 
@@ -132,7 +150,7 @@ async function dbCheckIn(userId) {
     latenessMins = Math.floor((now - officialStart) / (1000 * 60));
   }
 
-  var { error } = await sb.from('attendance').insert([{
+  var payload = {
     user_id: userId,
     user_name: user.name,
     date: dateStr,
@@ -146,9 +164,12 @@ async function dbCheckIn(userId) {
     lateness_text: formatMinsText(latenessMins),
     overtime_minutes: 0,
     overtime_text: '00:00'
-  }]);
+  };
 
+  var { error } = await sb.from('attendance').insert([payload]);
   if (error) return { success: false, message: error.message };
+
+  syncToGoogleSheets('check_in', { userId: userId });
   return { success: true, message: 'تم تسجيل حضورك بنجاح. يومك سعيد!' };
 }
 
@@ -188,6 +209,8 @@ async function dbCheckOut(userId) {
   }).eq('id', current.id);
 
   if (error) return { success: false, message: error.message };
+
+  syncToGoogleSheets('check_out', { userId: userId });
   return { success: true, message: 'تم تسجيل انصرافك بنجاح. عدد ساعات العمل: ' + hoursFloat + ' ساعة.' };
 }
 
@@ -202,7 +225,6 @@ async function dbGetMyLogs(userId) {
 async function dbGetMyNotifications(userId) {
   var sb = getSupabase();
   if (!sb || !userId) return [];
-  var { data } = await sb.from('attendance').select('*').eq('user_id', userId).order('created_at', { ascending: false });
   var { data: notifs } = await sb.from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false });
   return notifs || [];
 }
@@ -225,16 +247,19 @@ async function dbCreateEmployee(payload) {
     return { success: false, message: 'اسم المستخدم مسجل بالفعل لموظف آخر.' };
   }
 
-  var { error } = await sb.from('users').insert([{
+  var newEmp = {
     name: payload.name.trim(),
     username: cleanUsername,
     password: payload.password.trim(),
     shift_start: payload.shift_start || '08:00',
     shift_end: payload.shift_end || '17:00',
     role: 'employee'
-  }]);
+  };
 
+  var { error } = await sb.from('users').insert([newEmp]);
   if (error) return { success: false, message: error.message };
+
+  syncToGoogleSheets('create_employee', payload);
   return { success: true, message: 'تم إضافة الموظف بنجاح.' };
 }
 
@@ -255,6 +280,8 @@ async function dbUpdateEmployee(payload) {
 
   var { error } = await sb.from('users').update(updateObj).eq('id', payload.id);
   if (error) return { success: false, message: error.message };
+
+  syncToGoogleSheets('update_employee', payload);
   return { success: true, message: 'تم تعديل بيانات الموظف بنجاح.' };
 }
 
@@ -264,6 +291,8 @@ async function dbDeleteEmployee(id) {
 
   var { error } = await sb.from('users').delete().eq('id', id);
   if (error) return { success: false, message: error.message };
+
+  syncToGoogleSheets('delete_employee', { id: id });
   return { success: true, message: 'تم حذف الموظف بنجاح.' };
 }
 
@@ -281,15 +310,18 @@ async function dbSendNotification(payload) {
   var { data: users } = await sb.from('users').select('*').eq('id', payload.userId);
   if (!users || users.length === 0) return { success: false, message: 'الموظف غير موجود.' };
 
-  var { error } = await sb.from('notifications').insert([{
+  var newNotif = {
     user_id: payload.userId,
     user_name: users[0].name,
     type: payload.type,
     message: payload.message.trim(),
     amount: payload.type === 'reward' && payload.amount ? parseFloat(payload.amount) : null
-  }]);
+  };
 
+  var { error } = await sb.from('notifications').insert([newNotif]);
   if (error) return { success: false, message: error.message };
+
+  syncToGoogleSheets('send_notification', payload);
   return { success: true, message: 'تم إرسال الإشعار بنجاح.' };
 }
 
@@ -313,6 +345,8 @@ async function dbRevokeDevice(token) {
 
   var { error } = await sb.from('devices').delete().eq('token', token);
   if (error) return { success: false, message: error.message };
+
+  syncToGoogleSheets('revoke_device', { token: token });
   return { success: true, message: 'تم إلغاء تصريح الجهاز بنجاح.' };
 }
 
@@ -326,5 +360,6 @@ async function dbChangeAdminCredentials(payload) {
     { key: 'admin_password', value: payload.password.trim() }
   ]);
 
+  syncToGoogleSheets('change_admin_password', payload);
   return { success: true, message: 'تم تعديل بيانات حساب المدير بنجاح.' };
 }

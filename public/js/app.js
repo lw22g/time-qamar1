@@ -110,14 +110,12 @@ async function sendApiRequest(action, payload = {}, pathUrl = '', method = 'GET'
 // Check session and redirect if logged in (for login page)
 async function checkActiveSession() {
   try {
-    if (typeof GOOGLE_SCRIPT_URL !== 'undefined' && GOOGLE_SCRIPT_URL) {
-      const activeUser = JSON.parse(sessionStorage.getItem('time_user') || 'null');
-      if (activeUser) {
-        if (activeUser.role === 'admin') {
-          window.location.href = '/admin.html';
-        } else {
-          window.location.href = '/employee.html';
-        }
+    const activeUser = JSON.parse(sessionStorage.getItem('time_user') || 'null');
+    if (activeUser && activeUser.role) {
+      if (activeUser.role === 'admin') {
+        window.location.href = '/admin.html';
+      } else {
+        window.location.href = '/employee.html';
       }
       return;
     }
@@ -139,11 +137,7 @@ const logoutBtn = document.getElementById('logout-btn');
 if (logoutBtn) {
   logoutBtn.addEventListener('click', async () => {
     try {
-      if (typeof GOOGLE_SCRIPT_URL !== 'undefined' && GOOGLE_SCRIPT_URL) {
-        sessionStorage.removeItem('time_user');
-        window.location.href = '/';
-        return;
-      }
+      sessionStorage.removeItem('time_user');
       const data = await sendApiRequest('logout', {}, '/api/auth/logout', 'POST');
       if (data.ok) {
         window.location.href = '/';
@@ -166,14 +160,13 @@ if (loginForm) {
       const data = await sendApiRequest('login', { username, password }, '/api/auth/login', 'POST');
 
       if (data.success || data.ok) {
-        if (typeof GOOGLE_SCRIPT_URL !== 'undefined' && GOOGLE_SCRIPT_URL) {
-          sessionStorage.setItem('time_user', JSON.stringify({
-            id: data.user ? data.user.id : (data.role === 'admin' ? 'admin' : username),
-            name: data.name || (data.user ? data.user.name : 'المستخدم'),
-            username: username,
-            role: data.role
-          }));
-        }
+        sessionStorage.setItem('time_user', JSON.stringify({
+          id: data.user ? data.user.id : (data.role === 'admin' ? 'admin' : username),
+          name: data.name || (data.user ? data.user.name : 'المستخدم'),
+          username: username,
+          role: data.role
+        }));
+
         showToast('تم تسجيل الدخول بنجاح.', 'success');
         setTimeout(() => {
           if (data.role === 'admin') {
@@ -510,10 +503,8 @@ function initAdminDashboard() {
 
 async function loadAdminHeaderInfo() {
   try {
-    let user = null;
-    if (typeof GOOGLE_SCRIPT_URL !== 'undefined' && GOOGLE_SCRIPT_URL) {
-      user = JSON.parse(sessionStorage.getItem('time_user') || 'null');
-    } else {
+    let user = JSON.parse(sessionStorage.getItem('time_user') || 'null');
+    if (!user) {
       user = await sendApiRequest('get_me', {}, '/api/auth/me');
     }
     if (!user || user.role !== 'admin') {
@@ -1001,10 +992,8 @@ async function loadAdminAccountSettings() {
   if (!userInput) return;
 
   try {
-    let user = null;
-    if (typeof GOOGLE_SCRIPT_URL !== 'undefined' && GOOGLE_SCRIPT_URL) {
-      user = JSON.parse(sessionStorage.getItem('time_user') || 'null');
-    } else {
+    let user = JSON.parse(sessionStorage.getItem('time_user') || 'null');
+    if (!user) {
       user = await sendApiRequest('get_me', {}, '/api/auth/me');
     }
     if (user) {
@@ -1028,15 +1017,14 @@ async function handleAdminSettingsSubmit(e) {
     if (data.success || data.ok) {
       showToast(data.message || 'تم تحديث بيانات الحساب بنجاح.', 'success');
       document.getElementById('admin-pass-input').value = '';
-      if (typeof GOOGLE_SCRIPT_URL !== 'undefined' && GOOGLE_SCRIPT_URL) {
-        const activeUser = JSON.parse(sessionStorage.getItem('time_user') || '{}');
-        activeUser.name = name;
-        activeUser.username = username;
-        sessionStorage.setItem('time_user', JSON.stringify(activeUser));
-      }
+      const activeUser = JSON.parse(sessionStorage.getItem('time_user') || '{}');
+      activeUser.name = name;
+      activeUser.username = username;
+      sessionStorage.setItem('time_user', JSON.stringify(activeUser));
       loadAdminHeaderInfo();
     } else {
       showToast(data.message || 'فشل تعديل البيانات.', 'danger');
+    }
     }
   } catch (err) {
     showToast('خطأ في الاتصال بالخادم.', 'danger');
