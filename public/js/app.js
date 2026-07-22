@@ -141,28 +141,28 @@ async function sendApiRequest(action, payload = {}, pathUrl = '', method = 'GET'
   }
 }
 
-// Check session and redirect if logged in (for login page)
+// Check Device Authorization & Active Session
 async function checkActiveSession() {
   try {
+    const devStatus = await sendApiRequest('device_status', {}, '/api/device/status');
+    if (devStatus && devStatus.authorized === false) {
+      if (!window.location.pathname.endsWith('unauthorized.html')) {
+        window.location.href = 'unauthorized.html';
+        return;
+      }
+    }
+
     const activeUser = JSON.parse(sessionStorage.getItem('time_user') || 'null');
     if (activeUser && activeUser.role) {
       if (activeUser.role === 'admin') {
-        window.location.href = '/admin.html';
+        if (!window.location.pathname.endsWith('admin.html')) window.location.href = 'admin.html';
       } else {
-        window.location.href = '/employee.html';
+        if (!window.location.pathname.endsWith('employee.html')) window.location.href = 'employee.html';
       }
       return;
     }
-    const data = await sendApiRequest('get_me', {}, '/api/auth/me');
-    if (data.ok && data.role) {
-      if (data.role === 'admin') {
-        window.location.href = '/admin.html';
-      } else {
-        window.location.href = '/employee.html';
-      }
-    }
   } catch (err) {
-    console.error('Session check failed:', err);
+    console.error('Device/Session check error:', err);
   }
 }
 
@@ -225,7 +225,8 @@ if (loginForm) {
 
 let clockInterval = null;
 
-function initEmployeeDashboard() {
+async function initEmployeeDashboard() {
+  await checkActiveSession();
   runDigitalClock();
   loadEmployeeInfo();
 
@@ -493,7 +494,8 @@ let allLogsCached = [];
 let allEmployeesCached = [];
 let selectedEmployeeId = '';
 
-function initAdminDashboard() {
+async function initAdminDashboard() {
+  await checkActiveSession();
   loadAdminHeaderInfo();
   loadAdminStats();
   loadAllEmployees();
