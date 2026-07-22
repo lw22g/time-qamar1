@@ -99,13 +99,18 @@ async function sendApiRequest(action, payload = {}, pathUrl = '', method = 'GET'
       if (!payload.userId) payload.userId = activeUser.id;
       if (!payload.current_user) payload.current_user = activeUser;
     }
-    const res = await fetch(GOOGLE_SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action, payload })
-    });
-    const data = await res.json();
-    return { ok: data.success !== false, ...data };
+    try {
+      const res = await fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action, payload })
+      });
+      const data = await res.json();
+      return { ok: data.success !== false, ...data };
+    } catch (fetchErr) {
+      console.error('Google Script fetch error:', fetchErr);
+      return { success: false, message: 'فشل الاتصال بـ Google Sheets: ' + fetchErr.message };
+    }
   } else {
     const isPost = method === 'POST' || (payload && Object.keys(payload).length > 0 && method !== 'GET');
     const options = {
