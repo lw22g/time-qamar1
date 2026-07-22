@@ -81,32 +81,36 @@ async function sendApiRequest(action, payload = {}, pathUrl = '', method = 'GET'
     payload.device_token = deviceToken;
   }
 
+  // 1. Supabase Integration (if configured)
   if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL && SUPABASE_URL.includes('.supabase.co') && !SUPABASE_URL.includes('YOUR_SUPABASE')) {
-    var resData = null;
-    switch (action) {
-      case 'login': resData = await dbLogin(payload.username, payload.password); break;
-      case 'device_status': resData = await dbCheckDeviceStatus(); break;
-      case 'authorize_device': resData = await dbAuthorizeDevice(payload.name, payload.password); break;
-      case 'check_in': resData = await dbCheckIn(payload.userId); break;
-      case 'check_out': resData = await dbCheckOut(payload.userId); break;
-      case 'my_logs': resData = await dbGetMyLogs(payload.userId); break;
-      case 'my_notifications': resData = await dbGetMyNotifications(payload.userId); break;
-      case 'admin_employees': resData = await dbGetAdminEmployees(); break;
-      case 'create_employee': resData = await dbCreateEmployee(payload); break;
-      case 'update_employee': resData = await dbUpdateEmployee(payload); break;
-      case 'delete_employee': resData = await dbDeleteEmployee(payload.id); break;
-      case 'admin_attendance': resData = await dbGetAdminAttendance(); break;
-      case 'send_notification': resData = await dbSendNotification(payload); break;
-      case 'admin_notifications_list': resData = await dbGetAdminNotifications(); break;
-      case 'admin_devices': resData = await dbGetAuthorizedDevices(); break;
-      case 'revoke_device': resData = await dbRevokeDevice(payload.token); break;
-      case 'change_admin_password': resData = await dbChangeAdminCredentials(payload); break;
-      default: break;
+    if (typeof dbLogin === 'function') {
+      var resData = null;
+      switch (action) {
+        case 'login': resData = await dbLogin(payload.username, payload.password); break;
+        case 'device_status': resData = await dbCheckDeviceStatus(); break;
+        case 'authorize_device': resData = await dbAuthorizeDevice(payload.name, payload.password); break;
+        case 'check_in': resData = await dbCheckIn(payload.userId); break;
+        case 'check_out': resData = await dbCheckOut(payload.userId); break;
+        case 'my_logs': resData = await dbGetMyLogs(payload.userId); break;
+        case 'my_notifications': resData = await dbGetMyNotifications(payload.userId); break;
+        case 'admin_employees': resData = await dbGetAdminEmployees(); break;
+        case 'create_employee': resData = await dbCreateEmployee(payload); break;
+        case 'update_employee': resData = await dbUpdateEmployee(payload); break;
+        case 'delete_employee': resData = await dbDeleteEmployee(payload.id); break;
+        case 'admin_attendance': resData = await dbGetAdminAttendance(); break;
+        case 'send_notification': resData = await dbSendNotification(payload); break;
+        case 'admin_notifications_list': resData = await dbGetAdminNotifications(); break;
+        case 'admin_devices': resData = await dbGetAuthorizedDevices(); break;
+        case 'revoke_device': resData = await dbRevokeDevice(payload.token); break;
+        case 'change_admin_password': resData = await dbChangeAdminCredentials(payload); break;
+        default: break;
+      }
+      if (resData !== null && resData !== undefined) return { ok: resData.success !== false, ...resData };
     }
-    if (resData) return { ok: resData.success !== false, ...resData };
   }
 
-  if (typeof GOOGLE_SCRIPT_URL !== 'undefined' && GOOGLE_SCRIPT_URL) {
+  // 2. Google Apps Script Webhook (if configured and reachable)
+  if (typeof GOOGLE_SCRIPT_URL !== 'undefined' && GOOGLE_SCRIPT_URL && GOOGLE_SCRIPT_URL.trim() !== '') {
     const activeUser = JSON.parse(sessionStorage.getItem('time_user') || 'null');
     if (activeUser) {
       if (!payload.userId) payload.userId = activeUser.id;
@@ -118,27 +122,39 @@ async function sendApiRequest(action, payload = {}, pathUrl = '', method = 'GET'
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({ action, payload })
       });
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        return data;
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          return data;
+        }
+        return { ok: data.success !== false, ...data };
       }
-      return { ok: data.success !== false, ...data };
     } catch (fetchErr) {
-      console.error('Google Script fetch error:', fetchErr);
-      return { success: false, message: 'فشل الاتصال بـ Google Sheets: ' + fetchErr.message };
+      console.warn('Google Script fetch warning, trying local API fallback:', fetchErr);
     }
-  } else {
-    const isPost = method === 'POST' || (payload && Object.keys(payload).length > 0 && method !== 'GET');
-    const options = {
-      method: method !== 'GET' ? method : (isPost ? 'POST' : 'GET'),
-      headers: { 'Content-Type': 'application/json' }
-    };
-    if (isPost) options.body = JSON.stringify(payload);
-    
-    const res = await fetch(pathUrl, options);
-    const data = await res.json();
-    return { ok: res.ok, ...data };
   }
+
+  // 3. Local Node.js Express Server Fallback
+  if (pathUrl) {
+    try {
+      const isPost = method === 'POST' || (payload && Object.keys(payload).length > 0 && method !== 'GET');
+      const options = {
+        method: method !== 'GET' ? method : (isPost ? 'POST' : 'GET'),
+        headers: { 'Content-Type': 'application/json' }
+      };
+      if (isPost) options.body = JSON.stringify(payload);
+      
+      const res = await fetch(pathUrl, options);
+      if (res.ok) {
+        const data = await res.json();
+        return { ok: true, ...data };
+      }
+    } catch (localErr) {
+      console.error('Local API fetch error:', localErr);
+    }
+  }
+
+  return { ok: false, success: false, message: 'تعذر الاتصال بقاعدة البيانات.' };
 }
 
 // Check Device Authorization & Active Session
@@ -577,19 +593,32 @@ function switchTab(tabId) {
 async function loadAdminStats() {
   try {
     const empData = await sendApiRequest('admin_employees', {}, '/api/admin/employees');
-    const employees = Array.isArray(empData) ? empData : (empData.employees || []);
-    document.getElementById('admin-stat-employees').innerText = employees.length;
+    let employees = [];
+    if (Array.isArray(empData)) employees = empData;
+    else if (empData && Array.isArray(empData.employees)) employees = empData.employees;
+    else if (empData && Array.isArray(empData.users)) employees = empData.users;
+    
+    const empCountEl = document.getElementById('admin-stat-employees');
+    if (empCountEl) empCountEl.innerText = employees.length;
 
     const logsData = await sendApiRequest('admin_attendance', {}, '/api/admin/attendance');
-    const logs = Array.isArray(logsData) ? logsData : (logsData.logs || []);
-    
+    let logs = [];
+    if (Array.isArray(logsData)) logs = logsData;
+    else if (logsData && Array.isArray(logsData.logs)) logs = logsData.logs;
+
     const todayStr = new Date().toLocaleDateString('en-CA');
-    const todayLogs = logs.filter(l => l.date === todayStr);
+    const todayLogs = logs.filter(l => l.date === todayStr || (l.check_in && String(l.check_in).startsWith(todayStr)));
     const presentCount = todayLogs.filter(l => l.check_in && !l.check_out).length;
-    document.getElementById('admin-stat-present').innerText = presentCount;
+    const presentEl = document.getElementById('admin-stat-present');
+    if (presentEl) presentEl.innerText = presentCount;
 
     const devStatus = await sendApiRequest('device_status', {}, '/api/device/status');
-    document.getElementById('admin-stat-devices').innerText = `${devStatus.deviceCount || 1} / ${devStatus.maxDevices || 3}`;
+    const devEl = document.getElementById('admin-stat-devices');
+    if (devEl) {
+      const count = (devStatus && devStatus.deviceCount !== undefined) ? devStatus.deviceCount : 1;
+      const max = (devStatus && devStatus.maxDevices !== undefined) ? devStatus.maxDevices : 3;
+      devEl.innerText = `${count} / ${max}`;
+    }
 
   } catch (err) {
     console.error('Error loading stats:', err);
@@ -599,36 +628,60 @@ async function loadAdminStats() {
 async function loadAllEmployees() {
   try {
     const resData = await sendApiRequest('admin_employees', {}, '/api/admin/employees');
-    if (!resData.ok && !Array.isArray(resData) && typeof GOOGLE_SCRIPT_URL === 'undefined') {
-      window.location.href = '/';
-      return;
+    if (!resData) return;
+
+    if (Array.isArray(resData)) {
+      allEmployeesCached = resData;
+    } else if (resData.employees && Array.isArray(resData.employees)) {
+      allEmployeesCached = resData.employees;
+    } else if (resData.users && Array.isArray(resData.users)) {
+      allEmployeesCached = resData.users;
+    } else if (Array.isArray(resData.data)) {
+      allEmployeesCached = resData.data;
+    } else {
+      allEmployeesCached = [];
     }
-    allEmployeesCached = Array.isArray(resData) ? resData : (resData.employees || []);
-    
-    // Render employee list table
+
+    // Render employee list table safely
     const tbody = document.getElementById('employees-table-body');
     if (tbody) {
       if (allEmployeesCached.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center;">لا يوجد أي موظفين مسجلين حالياً.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">لا يوجد أي موظفين مسجلين حالياً.</td></tr>`;
       } else {
         tbody.innerHTML = '';
         allEmployeesCached.forEach(emp => {
           const shiftStart = formatTimeString(emp.shift_start, '08:00');
           const shiftEnd = formatTimeString(emp.shift_end, '17:00');
           const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td style="font-weight:600;">
-              ${emp.name}
-              <div style="font-size:11px; color:var(--text-muted);">دوام رسمي: ${shiftStart} - ${shiftEnd}</div>
-            </td>
-            <td><code>${emp.username}</code></td>
-            <td>
-              <button onclick="openEmployeeModal('${emp.id}', '${emp.name}', '${emp.username}', '${shiftStart}', '${shiftEnd}')" class="btn btn-secondary btn-sm" style="padding: 4px 10px; font-size:12px;">✏️ تعديل</button>
-            </td>
-            <td>
-              <button onclick="deleteEmployee('${emp.id}', '${emp.name}')" class="btn btn-danger btn-sm" style="padding: 4px 10px; font-size:12px;">🗑️ حذف</button>
-            </td>
-          `;
+
+          const tdInfo = document.createElement('td');
+          tdInfo.style.fontWeight = '600';
+          tdInfo.innerHTML = `${emp.name || 'موظف'}<div style="font-size:11px; color:var(--text-muted);">دوام رسمي: ${shiftStart} - ${shiftEnd}</div>`;
+
+          const tdUser = document.createElement('td');
+          tdUser.innerHTML = `<code>${emp.username || ''}</code>`;
+
+          const tdEdit = document.createElement('td');
+          const editBtn = document.createElement('button');
+          editBtn.className = 'btn btn-secondary btn-sm';
+          editBtn.style.cssText = 'padding: 4px 10px; font-size:12px;';
+          editBtn.innerText = '✏️ تعديل';
+          editBtn.onclick = () => openEmployeeModal(emp.id, emp.name, emp.username, shiftStart, shiftEnd);
+          tdEdit.appendChild(editBtn);
+
+          const tdDel = document.createElement('td');
+          const delBtn = document.createElement('button');
+          delBtn.className = 'btn btn-danger btn-sm';
+          delBtn.style.cssText = 'padding: 4px 10px; font-size:12px;';
+          delBtn.innerText = '🗑️ حذف';
+          delBtn.onclick = () => deleteEmployee(emp.id, emp.name);
+          tdDel.appendChild(delBtn);
+
+          tr.appendChild(tdInfo);
+          tr.appendChild(tdUser);
+          tr.appendChild(tdEdit);
+          tr.appendChild(tdDel);
+
           tbody.appendChild(tr);
         });
       }
@@ -653,23 +706,31 @@ async function loadAllEmployees() {
         const opt = document.createElement('option');
         opt.value = emp.id;
         opt.innerText = emp.name;
-        if (emp.id === selectedEmployeeId) opt.selected = true;
+        if (String(emp.id) === String(selectedEmployeeId)) opt.selected = true;
         filterSelect.appendChild(opt);
       });
     }
 
   } catch (err) {
-    console.error(err);
+    console.error('Error loading employees:', err);
   }
 }
 
 async function loadAllLogs() {
   try {
     const resData = await sendApiRequest('admin_attendance', {}, '/api/admin/attendance');
-    allLogsCached = Array.isArray(resData) ? resData : (resData.logs || []);
+    if (Array.isArray(resData)) {
+      allLogsCached = resData;
+    } else if (resData && Array.isArray(resData.logs)) {
+      allLogsCached = resData.logs;
+    } else if (resData && Array.isArray(resData.data)) {
+      allLogsCached = resData.data;
+    } else {
+      allLogsCached = [];
+    }
     applyLogFilters();
   } catch (err) {
-    console.error(err);
+    console.error('Error loading logs:', err);
   }
 }
 
