@@ -20,6 +20,19 @@ function formatMinutesText(totalMins) {
   return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
 }
 
+function formatTimeString(str, defaultVal = '08:00') {
+  if (!str) return defaultVal;
+  if (typeof str === 'string' && str.includes('T')) {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      const h = String(d.getHours()).padStart(2, '0');
+      const m = String(d.getMinutes()).padStart(2, '0');
+      return `${h}:${m}`;
+    }
+  }
+  return str;
+}
+
 // Global Theme Switcher
 function initTheme() {
   const savedTheme = localStorage.getItem('app_theme') || 'dark';
@@ -106,6 +119,9 @@ async function sendApiRequest(action, payload = {}, pathUrl = '', method = 'GET'
         body: JSON.stringify({ action, payload })
       });
       const data = await res.json();
+      if (Array.isArray(data)) {
+        return data;
+      }
       return { ok: data.success !== false, ...data };
     } catch (fetchErr) {
       console.error('Google Script fetch error:', fetchErr);
@@ -595,8 +611,8 @@ async function loadAllEmployees() {
       } else {
         tbody.innerHTML = '';
         allEmployeesCached.forEach(emp => {
-          const shiftStart = emp.shift_start || '08:00';
-          const shiftEnd = emp.shift_end || '17:00';
+          const shiftStart = formatTimeString(emp.shift_start, '08:00');
+          const shiftEnd = formatTimeString(emp.shift_end, '17:00');
           const tr = document.createElement('tr');
           tr.innerHTML = `
             <td style="font-weight:600;">
