@@ -12,8 +12,21 @@ function showToast(message, type = 'success') {
   }, 4000);
 }
 
+// Helper for cookies
+function getCookie(name) {
+  var value = "; " + document.cookie;
+  var parts = value.split("; " + name + "=");
+  if (parts.length === 2) return parts.pop().split(";").shift();
+  return null;
+}
+
 // API Dispatcher supporting Supabase Cloud, Google Sheets Webhook, and Node Backend
 async function sendApiRequest(action, payload = {}, pathUrl = '') {
+  const deviceToken = localStorage.getItem('device_token') || getCookie('device_token');
+  if (deviceToken && !payload.device_token && !payload.token) {
+    payload.device_token = deviceToken;
+  }
+
   if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL && SUPABASE_URL.includes('.supabase.co') && !SUPABASE_URL.includes('YOUR_SUPABASE')) {
     if (action === 'device_status') return await dbCheckDeviceStatus();
     if (action === 'authorize_device') return await dbAuthorizeDevice(payload.name, payload.password);
@@ -43,24 +56,27 @@ async function checkDeviceStatus() {
   const maxReached = document.getElementById('max-reached-message');
 
   try {
-    const data = await sendApiRequest('device_status', {}, '/api/device/status');
+    const deviceToken = localStorage.getItem('device_token') || getCookie('device_token');
+    const data = await sendApiRequest('device_status', { device_token: deviceToken }, '/api/device/status');
 
     if (data.authorized) {
       window.location.href = '/';
       return;
     }
 
-    statusInfo.innerHTML = `الأجهزة المفعّلة حالياً: <strong style="color: var(--primary);">${data.deviceCount} من أصل ${data.maxDevices}</strong>`;
+    if (statusInfo) {
+      statusInfo.innerHTML = `الأجهزة المفعّلة حالياً: <strong style="color: var(--primary);">${data.deviceCount} من أصل ${data.maxDevices}</strong>`;
+    }
 
     if (data.deviceCount >= data.maxDevices) {
-      maxReached.style.display = 'block';
-      authForm.style.display = 'none';
+      if (maxReached) maxReached.style.display = 'block';
+      if (authForm) authForm.style.display = 'none';
     } else {
-      maxReached.style.display = 'none';
-      authForm.style.display = 'block';
+      if (maxReached) maxReached.style.display = 'none';
+      if (authForm) authForm.style.display = 'block';
     }
   } catch (err) {
-    statusInfo.innerText = 'خطأ في الاتصال بالخادم. يرجى إعادة المحاولة.';
+    if (statusInfo) statusInfo.innerText = 'خطأ في الاتصال بالخادم. يرجى إعادة المحاولة.';
     console.error(err);
   }
 }
@@ -78,6 +94,10 @@ if (authDeviceForm) {
       const data = await sendApiRequest('authorize_device', { name, password }, '/api/device/authorize');
 
       if (data.success) {
+        if (data.token) {
+          localStorage.setItem('device_token', data.token);
+          document.cookie = `device_token=${data.token}; path=/; max-age=315360000; SameSite=Lax`;
+        }
         showToast(data.message, 'success');
         setTimeout(() => {
           window.location.href = '/';

@@ -53,8 +53,21 @@ document.addEventListener('DOMContentLoaded', () => {
   initTheme();
 });
 
+// Helper for cookies
+function getCookie(name) {
+  var value = "; " + document.cookie;
+  var parts = value.split("; " + name + "=");
+  if (parts.length === 2) return parts.pop().split(";").shift();
+  return null;
+}
+
 // Universal API Dispatcher supporting Supabase Cloud, Google Sheets Webhook, and Node Backend
 async function sendApiRequest(action, payload = {}, pathUrl = '', method = 'GET') {
+  const deviceToken = localStorage.getItem('device_token') || getCookie('device_token');
+  if (deviceToken && !payload.device_token && !payload.token) {
+    payload.device_token = deviceToken;
+  }
+
   if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL && SUPABASE_URL.includes('.supabase.co') && !SUPABASE_URL.includes('YOUR_SUPABASE')) {
     var resData = null;
     switch (action) {
@@ -83,8 +96,8 @@ async function sendApiRequest(action, payload = {}, pathUrl = '', method = 'GET'
   if (typeof GOOGLE_SCRIPT_URL !== 'undefined' && GOOGLE_SCRIPT_URL) {
     const activeUser = JSON.parse(sessionStorage.getItem('time_user') || 'null');
     if (activeUser) {
-      payload.userId = activeUser.id;
-      payload.current_user = activeUser;
+      if (!payload.userId) payload.userId = activeUser.id;
+      if (!payload.current_user) payload.current_user = activeUser;
     }
     const res = await fetch(GOOGLE_SCRIPT_URL, {
       method: 'POST',
