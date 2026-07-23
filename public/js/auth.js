@@ -27,6 +27,11 @@ async function sendApiRequest(action, payload = {}, pathUrl = '') {
     payload.device_token = deviceToken;
   }
 
+  if (typeof firebaseConfig !== 'undefined' && firebaseConfig.projectId && typeof fbCheckDeviceStatus === 'function') {
+    if (action === 'device_status') return await fbCheckDeviceStatus();
+    if (action === 'authorize_device') return await fbAuthorizeDevice(payload.name, payload.password);
+  }
+
   if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL && SUPABASE_URL.includes('.supabase.co') && !SUPABASE_URL.includes('YOUR_SUPABASE')) {
     if (action === 'device_status') return await dbCheckDeviceStatus();
     if (action === 'authorize_device') return await dbAuthorizeDevice(payload.name, payload.password);

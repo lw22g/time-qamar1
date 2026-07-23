@@ -81,7 +81,33 @@ async function sendApiRequest(action, payload = {}, pathUrl = '', method = 'GET'
     payload.device_token = deviceToken;
   }
 
-  // 1. Supabase Integration (if configured)
+  // 1. Firebase Integration (if configured)
+  if (typeof firebaseConfig !== 'undefined' && firebaseConfig.projectId && typeof fbLogin === 'function') {
+    var resData = null;
+    switch (action) {
+      case 'login': resData = await fbLogin(payload.username, payload.password); break;
+      case 'device_status': resData = await fbCheckDeviceStatus(); break;
+      case 'authorize_device': resData = await fbAuthorizeDevice(payload.name, payload.password); break;
+      case 'check_in': resData = await fbCheckIn(payload.userId); break;
+      case 'check_out': resData = await fbCheckOut(payload.userId); break;
+      case 'my_logs': resData = await fbGetMyLogs(payload.userId); break;
+      case 'my_notifications': resData = await fbGetMyNotifications(payload.userId); break;
+      case 'admin_employees': resData = await fbGetAdminEmployees(); break;
+      case 'create_employee': resData = await fbCreateEmployee(payload); break;
+      case 'update_employee': resData = await fbUpdateEmployee(payload); break;
+      case 'delete_employee': resData = await fbDeleteEmployee(payload.id); break;
+      case 'admin_attendance': resData = await fbGetAdminAttendance(); break;
+      case 'send_notification': resData = await fbSendNotification(payload); break;
+      case 'admin_notifications_list': resData = await fbGetAdminNotifications(); break;
+      case 'admin_devices': resData = await fbGetAuthorizedDevices(); break;
+      case 'revoke_device': resData = await fbRevokeDevice(payload.token); break;
+      case 'change_admin_password': resData = await fbChangeAdminCredentials(payload); break;
+      default: break;
+    }
+    if (resData !== null && resData !== undefined) return { ok: resData.success !== false, ...resData };
+  }
+
+  // 2. Supabase Integration (if configured)
   if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL && SUPABASE_URL.includes('.supabase.co') && !SUPABASE_URL.includes('YOUR_SUPABASE')) {
     if (typeof dbLogin === 'function') {
       var resData = null;
