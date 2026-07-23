@@ -482,6 +482,48 @@ function setupEventListeners() {
     }
   });
 
+  // Open Employee Settings Modal
+  document.getElementById('open-emp-settings-btn')?.addEventListener('click', () => {
+    if (!state.currentUser) return;
+    const inputUser = document.getElementById('emp-setting-new-username');
+    if (inputUser) inputUser.value = state.currentUser.username || '';
+    document.getElementById('emp-setting-current-password').value = '';
+    document.getElementById('emp-setting-new-password').value = '';
+    showModal('emp-settings-modal');
+  });
+
+  // Employee Settings Form Submit
+  document.getElementById('emp-settings-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!state.currentUser || state.currentUser.role !== 'EMPLOYEE') return;
+
+    const newUsername = document.getElementById('emp-setting-new-username').value.trim();
+    const currentPassword = document.getElementById('emp-setting-current-password').value.trim();
+    const newPassword = document.getElementById('emp-setting-new-password').value.trim();
+
+    if (!newUsername || !currentPassword || !newPassword) {
+      showToast('يرجى ملء جميع البيانات المطلوبة', 'warning');
+      return;
+    }
+
+    const res = await callApi('updateEmployeeCredentials', {
+      employeeId: state.currentUser.id,
+      currentPassword: currentPassword,
+      newUsername: newUsername,
+      newPassword: newPassword
+    });
+
+    if (res && res.success) {
+      showToast(res.message, 'success');
+      state.currentUser.username = newUsername;
+      saveSession();
+      hideModal('emp-settings-modal');
+      document.getElementById('emp-settings-form').reset();
+    } else {
+      showToast(res.message || 'فشل تحديث الحساب', 'danger');
+    }
+  });
+
   // Admin Account Settings Form Submit
   document.getElementById('admin-settings-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -1035,6 +1077,20 @@ function mockApiHandler(action, payload) {
         case 'getEmployeeNotifications':
           const notifs = mockDb.notifications.filter(n => n.employeeId === payload.employeeId || n.employeeId === 'ALL');
           resolve({ success: true, notifications: notifs });
+          break;
+        case 'updateEmployeeCredentials':
+          const empToUpdate = mockDb.employees.find(e => e.id === payload.employeeId);
+          if (empToUpdate) {
+            if (empToUpdate.password !== payload.currentPassword) {
+              resolve({ success: false, message: 'كلمة المرور الحالية غير صحيحة!' });
+            } else {
+              empToUpdate.username = payload.newUsername;
+              empToUpdate.password = payload.newPassword;
+              resolve({ success: true, message: 'تم تحديث بيانات الحساب بنجاح (المعاينة)' });
+            }
+          } else {
+            resolve({ success: false, message: 'الموظف غير موجود' });
+          }
           break;
         case 'getPendingDevices':
           resolve({ success: true, devices: mockDb.devices });
