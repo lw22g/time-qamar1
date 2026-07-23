@@ -107,38 +107,44 @@ async function sendApiRequest(action, payload = {}, pathUrl = '', method = 'GET'
     return null;
   }
 
-  // 1. Firebase Integration with Google Sheets Hybrid Fallback & Auto-Sync
+  // 1. Firebase Integration (Data import strictly from Firebase, Write operations synced to Google Sheets as backup)
   if (hasFirebase) {
     var resData = null;
     switch (action) {
+      // READ / IMPORT OPERATIONS (Firebase Only)
       case 'login':
         resData = await fbLogin(payload.username, payload.password);
-        if ((!resData || !resData.success) && hasGoogleScript) {
-          const gsRes = await callGoogleScript();
-          if (gsRes && (gsRes.success || gsRes.role)) {
-            if (gsRes.user && gsRes.role === 'employee' && typeof fbCreateEmployee === 'function') {
-              fbCreateEmployee({
-                id: gsRes.user.id || gsRes.user.ID,
-                name: gsRes.user.name || gsRes.user.Name,
-                username: payload.username,
-                password: payload.password,
-                shift_start: gsRes.user.shift_start || gsRes.user.ShiftStart || '08:00',
-                shift_end: gsRes.user.shift_end || gsRes.user.ShiftEnd || '17:00'
-              }).catch(function(e) { console.log('FB sync note:', e); });
-            }
-            return { ok: true, ...gsRes };
-          }
-        }
         break;
 
       case 'device_status':
         resData = await fbCheckDeviceStatus();
-        if ((!resData || resData.authorized === false) && hasGoogleScript) {
-          const gsRes = await callGoogleScript();
-          if (gsRes) resData = gsRes;
-        }
         break;
 
+      case 'my_logs':
+        resData = await fbGetMyLogs(payload.userId);
+        break;
+
+      case 'my_notifications':
+        resData = await fbGetMyNotifications(payload.userId);
+        break;
+
+      case 'admin_employees':
+        resData = await fbGetAdminEmployees();
+        break;
+
+      case 'admin_attendance':
+        resData = await fbGetAdminAttendance();
+        break;
+
+      case 'admin_notifications_list':
+        resData = await fbGetAdminNotifications();
+        break;
+
+      case 'admin_devices':
+        resData = await fbGetAuthorizedDevices();
+        break;
+
+      // WRITE / STORAGE OPERATIONS (Dual Cloud Sync: Firebase + Google Sheets Backup)
       case 'authorize_device':
         resData = await fbAuthorizeDevice(payload.name, payload.password);
         if (hasGoogleScript) callGoogleScript();
@@ -152,49 +158,6 @@ async function sendApiRequest(action, payload = {}, pathUrl = '', method = 'GET'
       case 'check_out':
         resData = await fbCheckOut(payload.userId);
         if (hasGoogleScript) callGoogleScript();
-        break;
-
-      case 'my_logs':
-        resData = await fbGetMyLogs(payload.userId);
-        if ((!resData || resData.length === 0) && hasGoogleScript) {
-          const gsRes = await callGoogleScript();
-          if (gsRes && Array.isArray(gsRes) && gsRes.length > 0) return gsRes;
-          if (gsRes && Array.isArray(gsRes.data) && gsRes.data.length > 0) return gsRes.data;
-        }
-        break;
-
-      case 'my_notifications':
-        resData = await fbGetMyNotifications(payload.userId);
-        if ((!resData || resData.length === 0) && hasGoogleScript) {
-          const gsRes = await callGoogleScript();
-          if (gsRes && Array.isArray(gsRes) && gsRes.length > 0) return gsRes;
-          if (gsRes && Array.isArray(gsRes.data) && gsRes.data.length > 0) return gsRes.data;
-        }
-        break;
-
-      case 'admin_employees':
-        resData = await fbGetAdminEmployees();
-        if ((!resData || resData.length === 0) && hasGoogleScript) {
-          const gsRes = await callGoogleScript();
-          if (gsRes) {
-            const list = Array.isArray(gsRes) ? gsRes : (gsRes.users || gsRes.employees || []);
-            if (list && list.length > 0) {
-              list.forEach(emp => {
-                if (typeof fbCreateEmployee === 'function') {
-                  fbCreateEmployee({
-                    id: emp.id || emp.ID,
-                    name: emp.name || emp.Name,
-                    username: emp.username || emp.Username,
-                    password: emp.password || emp.Password || '123456',
-                    shift_start: emp.shift_start || emp.ShiftStart || '08:00',
-                    shift_end: emp.shift_end || emp.ShiftEnd || '17:00'
-                  }).catch(function() {});
-                }
-              });
-              return list;
-            }
-          }
-        }
         break;
 
       case 'create_employee':
@@ -212,42 +175,9 @@ async function sendApiRequest(action, payload = {}, pathUrl = '', method = 'GET'
         if (hasGoogleScript) callGoogleScript();
         break;
 
-      case 'admin_attendance':
-        resData = await fbGetAdminAttendance();
-        if ((!resData || resData.length === 0) && hasGoogleScript) {
-          const gsRes = await callGoogleScript();
-          if (gsRes) {
-            const list = Array.isArray(gsRes) ? gsRes : (gsRes.attendance || gsRes.logs || []);
-            if (list && list.length > 0) return list;
-          }
-        }
-        break;
-
       case 'send_notification':
         resData = await fbSendNotification(payload);
         if (hasGoogleScript) callGoogleScript();
-        break;
-
-      case 'admin_notifications_list':
-        resData = await fbGetAdminNotifications();
-        if ((!resData || resData.length === 0) && hasGoogleScript) {
-          const gsRes = await callGoogleScript();
-          if (gsRes) {
-            const list = Array.isArray(gsRes) ? gsRes : (gsRes.notifications || []);
-            if (list && list.length > 0) return list;
-          }
-        }
-        break;
-
-      case 'admin_devices':
-        resData = await fbGetAuthorizedDevices();
-        if ((!resData || resData.length === 0) && hasGoogleScript) {
-          const gsRes = await callGoogleScript();
-          if (gsRes) {
-            const list = Array.isArray(gsRes) ? gsRes : (gsRes.devices || []);
-            if (list && list.length > 0) return list;
-          }
-        }
         break;
 
       case 'revoke_device':

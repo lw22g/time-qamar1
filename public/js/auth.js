@@ -32,19 +32,7 @@ async function sendApiRequest(action, payload = {}, pathUrl = '') {
 
   if (hasFirebase) {
     if (action === 'device_status') {
-      var status = await fbCheckDeviceStatus();
-      if (status && status.authorized) return status;
-      if (hasGoogleScript) {
-        try {
-          const res = await fetch(GOOGLE_SCRIPT_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({ action, payload })
-          });
-          return await res.json();
-        } catch (e) {}
-      }
-      return status;
+      return await fbCheckDeviceStatus();
     }
     if (action === 'authorize_device') {
       var resFB = await fbAuthorizeDevice(payload.name, payload.password);
