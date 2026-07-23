@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>لوحة تحكم الموظف | نظام الحضور والانصراف</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header>
+    <div class="container header-content">
+      <div class="logo-section">
+        <div class="logo-icon">🕒</div>
+        <div class="logo-text">نظام الحضور والانصراف</div>
+      </div>
+      <div class="user-info-bar">
+        <button id="theme-toggle-btn" class="theme-toggle-btn">☀️ المظهر الفاتح</button>
+        <span id="user-display-name" style="font-weight: 600;">جاري التحميل...</span>
+        <button id="logout-btn" class="btn btn-secondary btn-sm" style="padding: 6px 12px; font-size: 13px;">خروج</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" style="margin-top: 30px; flex: 1;">
+    <div class="dashboard-grid">
+      <!-- Right Pane: Clock & Actions -->
+      <div class="glass-card attendance-panel">
+        <div id="digital-clock" class="clock-display">00:00:00</div>
+        <div id="current-date" class="date-display">...</div>
+        
+        <div id="status-badge-container" style="margin-bottom: 25px;">
+          <span id="attendance-status-badge" class="badge badge-warning">جاري التحقق من الحالة...</span>
+        </div>
+
+        <div class="action-buttons">
+          <button id="checkin-btn" class="btn btn-success">تسجيل حضور</button>
+          <button id="checkout-btn" class="btn btn-danger">تسجيل انصراف</button>
+        </div>
+      </div>
+
+      <!-- Left Pane: Stats & Notifications -->
+      <div style="display: flex; flex-direction: column; gap: 25px;">
+        <!-- Stats cards -->
+        <div class="stats-row" style="margin-bottom: 0;">
+          <div class="stat-card">
+            <div class="stat-icon success">📅</div>
+            <div class="stat-info">
+              <span class="stat-label">أيام الحضور</span>
+              <span id="stat-days-count" class="stat-value">0</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon primary">⏱️</div>
+            <div class="stat-info">
+              <span class="stat-label">مجموع الساعات</span>
+              <span id="stat-total-hours" class="stat-value">0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Alerts / Rewards panel -->
+        <div class="glass-card" style="margin-bottom: 0; flex: 1; display: flex; flex-direction: column;">
+          <h3 style="margin-bottom: 20px; font-size: 18px; display: flex; align-items: center; gap: 8px;">
+            🔔 الإشعارات والجوائز 
+            <span id="notification-count" class="badge badge-danger" style="display: none; padding: 2px 6px;">0</span>
+          </h3>
+          <div id="notifications-list" class="notifications-list" style="flex: 1;">
+            <div class="text-muted" style="text-align: center; padding: 20px;">لا توجد إشعارات أو مكافآت حالياً.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Attendance history -->
+    <div class="glass-card" style="margin-top: 25px;">
+      <h3 style="margin-bottom: 20px; font-size: 18px;">سجل الحضور والانصراف الخاص بك</h3>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>التاريخ</th>
+              <th>وقت الحضور</th>
+              <th>التأخير</th>
+              <th>وقت الانصراف</th>
+              <th>الإضافي</th>
+              <th>ساعات العمل</th>
+              <th>الحالة</th>
+            </tr>
+          </thead>
+          <tbody id="attendance-history-body">
+            <tr>
+              <td colspan="7" style="text-align: center; padding: 20px;">جاري تحميل سجل الحضور...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <footer style="margin-top: auto; padding: 20px 0; text-align: center; font-size: 12px; color: var(--text-muted); border-top: 1px solid var(--border-color);">
+    نظام الحضور والانصراف الذكي &copy; 2026 - مخصص لحواسيب الشركة فقط
+  </footer>
+
+  <div id="toast-el" class="toast">
+    <span id="toast-text"></span>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script src="js/firebase_client.js"></script>
+  <script src="js/supabase_client.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      initEmployeeDashboard();
+    });
+  </script>
+</body>
+</html>
