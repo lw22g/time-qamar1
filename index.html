@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" class="h-full bg-slate-50">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>نظام إدارة الحضور والانصراف - Employee Attendance System</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Readex Pro', 'Inter', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#f0f7ff',
+              100: '#e0effe',
+              500: '#0284c7',
+              600: '#0369a1',
+              700: '#075985',
+              800: '#0c4a6e',
+              900: '#082f49',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts: Readex Pro & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Readex+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="h-full font-sans text-slate-800 antialiased flex flex-col selection:bg-brand-500 selection:text-white">
+
+  <!-- Top Global API Loading Progress Bar -->
+  <div id="global-progress-bar" class="fixed top-0 left-0 right-0 h-1 bg-brand-500 z-50 transition-all duration-300 opacity-0 transform -translate-y-full">
+    <div class="h-full bg-gradient-to-r from-blue-400 via-sky-500 to-indigo-600 animate-pulse"></div>
+  </div>
+
+  <!-- Loading Overlay Spinner -->
+  <div id="loading-overlay" class="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-40 flex items-center justify-center hidden opacity-0 transition-opacity duration-200">
+    <div class="bg-white p-6 rounded-2xl shadow-xl flex flex-col items-center gap-3 border border-slate-100">
+      <div class="w-10 h-10 border-4 border-brand-500/20 border-t-brand-600 rounded-full animate-spin"></div>
+      <span class="text-xs font-semibold text-slate-600">جاري الاتصال بالخادم...</span>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="fixed bottom-5 left-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- Header Bar -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      
+      <!-- Brand Logo -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-sky-500 flex items-center justify-center text-white shadow-md shadow-brand-500/20">
+          <i class="fa-solid fa-clock-rotate-left text-lg"></i>
+        </div>
+        <div>
+          <h1 class="text-base font-bold text-slate-900 leading-tight">نظام الحضور والانصراف</h1>
+          <p class="text-xs text-slate-500">Attendance & Departure System</p>
+        </div>
+      </div>
+
+      <!-- Header Status & Clock -->
+      <div class="flex items-center gap-3">
+        <div id="live-clock" class="hidden sm:flex items-center gap-2 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-full text-xs font-medium text-slate-700">
+          <i class="fa-regular fa-clock text-brand-600"></i>
+          <span id="clock-display">00:00:00</span>
+        </div>
+
+        <div id="connection-status-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+          <span class="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+          <span id="connection-text">معاينة محلية (Demo)</span>
+        </div>
+
+        <!-- User Profile Badge -->
+        <div id="user-profile-badge" class="hidden flex items-center gap-2 bg-slate-100 border border-slate-200 pl-1.5 pr-3 py-1 rounded-full">
+          <div class="w-7 h-7 rounded-full bg-brand-600 text-white flex items-center justify-center text-xs font-semibold">
+            <i class="fa-solid fa-user"></i>
+          </div>
+          <div class="flex flex-col text-right">
+            <span id="user-display-name" class="text-xs font-bold text-slate-800">المستخدم</span>
+            <span id="user-role-badge" class="text-[10px] text-slate-500">المدير</span>
+          </div>
+          <button id="logout-btn" class="mr-1 w-7 h-7 rounded-full hover:bg-rose-100 text-slate-400 hover:text-rose-600 flex items-center justify-center transition-colors" title="تسجيل الخروج">
+            <i class="fa-solid fa-right-from-bracket text-xs"></i>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- Main View Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- 1. PENDING DEVICE APPROVAL SCREEN -->
+    <section id="pending-device-screen" class="view-screen hidden max-w-md mx-auto py-12">
+      <div class="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm text-center">
+        <div class="w-16 h-16 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-inner">
+          <i class="fa-solid fa-mobile-screen-button text-2xl animate-bounce"></i>
+        </div>
+        <h2 class="text-xl font-bold text-slate-900 mb-2">الجهاز بانتظار موافقة المدير</h2>
+        <p class="text-xs text-slate-500 mb-6">هذا الجهاز غير معتمد حالياً للوصول إلى نظام الحضور والانصراف.</p>
+        
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6 text-right">
+          <label class="text-xs font-semibold text-slate-600 block mb-2">معرّف الجهاز الخاص بك (UUID):</label>
+          <div class="flex gap-2">
+            <input type="text" id="device-uuid-display" readonly class="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono text-brand-700 font-medium select-all focus:outline-none">
+            <button id="copy-uuid-btn" class="bg-white border border-slate-200 hover:border-slate-300 text-slate-700 px-3 py-2 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5">
+              <i class="fa-regular fa-copy"></i>
+              <span>نسخ</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-3 text-xs flex items-center gap-2 mb-6 text-right">
+          <i class="fa-solid fa-circle-info text-amber-600 shrink-0"></i>
+          <span>يمكنك الموافقة من لوحة المدير أو إرسال رمز تفعيل مؤقت مكون من 6 أرقام إلى بريدك الإلكتروني!</span>
+        </div>
+
+        <!-- Email OTP Verification Box -->
+        <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-6 space-y-3 text-right">
+          <button id="send-otp-btn" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-2.5 px-4 rounded-xl text-xs transition-all shadow-xs flex items-center justify-center gap-2">
+            <i class="fa-solid fa-paper-plane"></i>
+            <span>إرسال رمز التفعيل إلى بريد المدير (OTP)</span>
+          </button>
+          
+          <div class="pt-2 border-t border-slate-200">
+            <label class="block text-xs font-semibold text-slate-700 mb-1">أدخل الرمز المكون من 6 أرقام:</label>
+            <div class="flex gap-2">
+              <input type="text" id="otp-code-input" maxlength="6" placeholder="123456" class="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-center text-base font-mono font-bold tracking-widest text-slate-900 focus:outline-none focus:border-brand-500">
+              <button id="verify-otp-btn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1">
+                <i class="fa-solid fa-check"></i>
+                <span>تأكيد</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <button id="check-approval-btn" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 px-4 rounded-xl text-sm transition-all shadow-md shadow-brand-600/20 flex items-center justify-center gap-2">
+          <i class="fa-solid fa-rotate-right"></i>
+          <span>التحقق من حالة الاعتماد الآن</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- 2. LOGIN SCREEN -->
+    <section id="login-screen" class="view-screen hidden max-w-md mx-auto py-8">
+      <div class="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm">
+        
+        <!-- Login Role Tabs -->
+        <div class="flex p-1 bg-slate-100 rounded-xl mb-6">
+          <button class="tab-btn flex-1 py-2 text-xs font-bold rounded-lg transition-all text-slate-600 active shadow-xs" data-target="emp-login-form">
+            <i class="fa-solid fa-user ml-1"></i> دخول الموظفين
+          </button>
+          <button class="tab-btn flex-1 py-2 text-xs font-bold rounded-lg transition-all text-slate-600" data-target="admin-login-form">
+            <i class="fa-solid fa-user-shield ml-1"></i> دخول الإدارة
+          </button>
+        </div>
+
+        <!-- Employee Login Form -->
+        <form id="emp-login-form" class="auth-form space-y-4">
+          <div class="text-right">
+            <h3 class="text-base font-bold text-slate-900">تسجيل دخول الموظف</h3>
+            <p class="text-xs text-slate-500">أدخل اسم المستخدم وكلمة المرور للبدء</p>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">اسم المستخدم</label>
+            <input type="text" id="emp-username" placeholder="أدخل اسم المستخدم" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:bg-white focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">كلمة المرور</label>
+            <input type="password" id="emp-password" placeholder="أدخل كلمة المرور" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:bg-white focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all">
+          </div>
+          <button type="submit" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 px-4 rounded-xl text-sm transition-all shadow-md shadow-brand-600/20 flex items-center justify-center gap-2">
+            <i class="fa-solid fa-right-to-bracket"></i>
+            <span>تسجيل الدخول</span>
+          </button>
+        </form>
+
+        <!-- Admin Login Form -->
+        <form id="admin-login-form" class="auth-form space-y-4 hidden">
+          <div class="text-right">
+            <h3 class="text-base font-bold text-slate-900">تسجيل دخول المدير</h3>
+            <p class="text-xs text-slate-500">الوصول إلى لوحة التحكم والإدارة</p>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">اسم مدير النظام</label>
+            <input type="text" id="admin-username" placeholder="اسم مدير النظام" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:bg-white focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">كلمة المرور</label>
+            <input type="password" id="admin-password" placeholder="كلمة المرور" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:bg-white focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all">
+          </div>
+          <button type="submit" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3 px-4 rounded-xl text-sm transition-all shadow-md flex items-center justify-center gap-2">
+            <i class="fa-solid fa-shield-halved"></i>
+            <span>دخول لوحة التحكم</span>
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <!-- 3. EMPLOYEE DASHBOARD -->
+    <section id="employee-dashboard" class="view-screen hidden space-y-6">
+      
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <!-- Attendance Action Card (Large Hero Buttons) -->
+        <div class="lg:col-span-2 bg-white border border-slate-200 rounded-3xl p-6 shadow-xs flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                  <i class="fa-solid fa-fingerprint text-xl"></i>
+                </div>
+                <div>
+                  <h3 class="text-base font-bold text-slate-900">تسجيل الحضور والانصراف</h3>
+                  <p class="text-xs text-slate-500">اختر الإجراء المناسب لدوام اليوم</p>
+                </div>
+              </div>
+              <span id="today-date-badge" class="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-xs font-semibold">2026-07-23</span>
+            </div>
+
+            <!-- Shift Information -->
+            <div class="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 mb-6 grid grid-cols-2 gap-4">
+              <div class="flex items-center gap-3">
+                <i class="fa-regular fa-clock text-brand-600 text-lg"></i>
+                <div>
+                  <span class="text-[11px] font-semibold text-slate-400 block">وردية العمل المحدد</span>
+                  <strong id="emp-shift-times" class="text-xs font-bold text-slate-800">08:00 ص - 04:00 م</strong>
+                </div>
+              </div>
+              <div class="flex items-center gap-3">
+                <i class="fa-solid fa-circle-check text-emerald-600 text-lg"></i>
+                <div>
+                  <span class="text-[11px] font-semibold text-slate-400 block">حالة الدوام اليوم</span>
+                  <strong id="emp-today-status" class="text-xs font-bold text-amber-600">لم يتم التسجيل بعد</strong>
+                </div>
+              </div>
+            </div>
+
+            <!-- Big Prominent Action Buttons -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+              <button id="btn-checkin" class="hero-btn group bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white p-6 rounded-2xl shadow-md shadow-emerald-500/20 flex flex-col items-center justify-center gap-2 transition-all transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-40 disabled:pointer-events-none">
+                <i class="fa-solid fa-right-to-bracket text-3xl group-hover:scale-110 transition-transform"></i>
+                <span class="text-xl font-extrabold tracking-wide">حضور</span>
+                <span class="text-xs font-medium text-emerald-100">تسجيل بداية العمل اليومي</span>
+              </button>
+
+              <button id="btn-checkout" disabled class="hero-btn group bg-gradient-to-br from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white p-6 rounded-2xl shadow-md shadow-amber-500/20 flex flex-col items-center justify-center gap-2 transition-all transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-40 disabled:pointer-events-none">
+                <i class="fa-solid fa-right-from-bracket text-3xl group-hover:scale-110 transition-transform"></i>
+                <span class="text-xl font-extrabold tracking-wide">انصراف</span>
+                <span class="text-xs font-medium text-amber-100">تسجيل نهاية العمل اليومي</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Optional Delay Reason -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">سبب التأخير (اختياري عند الحضور المتأخر):</label>
+            <input type="text" id="delay-reason-input" placeholder="اكتب سبب التأخير هنا إن وجد..." class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all">
+          </div>
+        </div>
+
+        <!-- Notification Panel -->
+        <div class="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs flex flex-col">
+          <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+            <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <i class="fa-solid fa-bell text-brand-600"></i>
+              <span>التنبيهات والمكافآت</span>
+            </h3>
+            <button id="refresh-emp-notifs" class="w-7 h-7 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors">
+              <i class="fa-solid fa-rotate-right text-xs"></i>
+            </button>
+          </div>
+
+          <div id="emp-notifications-list" class="flex-1 overflow-y-auto space-y-3 max-h-72">
+            <div class="text-center py-8 text-xs text-slate-400">لا توجد تنبيهات حالياً</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Employee History Table Card -->
+      <div class="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs">
+        <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+          <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-calendar-days text-brand-600"></i>
+            <span>سجل الحضور والغياب الخاص بي</span>
+          </h3>
+          <button id="refresh-emp-history" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5">
+            <i class="fa-solid fa-arrows-rotate"></i>
+            <span>تحديث السجل</span>
+          </button>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-right text-xs">
+            <thead>
+              <tr class="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+                <th class="py-3 px-4">التاريخ</th>
+                <th class="py-3 px-4">وقت الحضور</th>
+                <th class="py-3 px-4">وقت الانصراف</th>
+                <th class="py-3 px-4">سبب التأخير</th>
+                <th class="py-3 px-4">العجز (تأخير)</th>
+                <th class="py-3 px-4">الوقت الإضافي</th>
+                <th class="py-3 px-4">الحالة</th>
+              </tr>
+            </thead>
+            <tbody id="emp-history-tbody" class="divide-y divide-slate-100 text-slate-700">
+              <!-- Dynamic Rows -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- 4. ADMIN DASHBOARD -->
+    <section id="admin-dashboard" class="view-screen hidden space-y-6">
+      
+      <!-- Quick Stats -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg shrink-0">
+            <i class="fa-solid fa-users"></i>
+          </div>
+          <div>
+            <span class="text-[11px] font-semibold text-slate-400 block">إجمالي الموظفين</span>
+            <strong id="stat-total-employees" class="text-base font-bold text-slate-900">0</strong>
+          </div>
+        </div>
+
+        <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg shrink-0">
+            <i class="fa-solid fa-user-check"></i>
+          </div>
+          <div>
+            <span class="text-[11px] font-semibold text-slate-400 block">الحاضرون اليوم</span>
+            <strong id="stat-today-checkins" class="text-base font-bold text-slate-900">0</strong>
+          </div>
+        </div>
+
+        <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-lg shrink-0">
+            <i class="fa-solid fa-mobile-retro"></i>
+          </div>
+          <div>
+            <span class="text-[11px] font-semibold text-slate-400 block">الأجهزة المعلقة</span>
+            <strong id="stat-pending-devices" class="text-base font-bold text-slate-900">0</strong>
+          </div>
+        </div>
+
+        <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-lg shrink-0">
+            <i class="fa-solid fa-hourglass-half"></i>
+          </div>
+          <div>
+            <span class="text-[11px] font-semibold text-slate-400 block">إجمالي وقت العجز</span>
+            <strong id="stat-total-deficit" class="text-base font-bold text-slate-900">0 دقيقة</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Admin Tabs Navigation -->
+      <div class="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs">
+        
+        <div class="flex border-b border-slate-200 gap-2 mb-6 overflow-x-auto pb-2">
+          <button class="tab-btn px-4 py-2.5 text-xs font-bold rounded-xl transition-all text-slate-600 whitespace-nowrap active shadow-xs" data-target="admin-tab-attendance">
+            <i class="fa-solid fa-clipboard-user ml-1.5"></i> سجل الحضور
+          </button>
+          <button class="tab-btn px-4 py-2.5 text-xs font-bold rounded-xl transition-all text-slate-600 whitespace-nowrap" data-target="admin-tab-employees">
+            <i class="fa-solid fa-users-gear ml-1.5"></i> إدارة الموظفين
+          </button>
+          <button class="tab-btn px-4 py-2.5 text-xs font-bold rounded-xl transition-all text-slate-600 whitespace-nowrap" data-target="admin-tab-devices">
+            <i class="fa-solid fa-mobile-screen-button ml-1.5"></i> الأجهزة المعتمدة <span id="pending-count-badge" class="hidden px-1.5 py-0.5 bg-rose-500 text-white text-[10px] rounded-full mr-1">0</span>
+          </button>
+          <button class="tab-btn px-4 py-2.5 text-xs font-bold rounded-xl transition-all text-slate-600 whitespace-nowrap" data-target="admin-tab-notifications">
+            <i class="fa-solid fa-paper-plane ml-1.5"></i> إرسال التنبيهات
+          </button>
+          <button class="tab-btn px-4 py-2.5 text-xs font-bold rounded-xl transition-all text-slate-600 whitespace-nowrap" data-target="admin-tab-settings">
+            <i class="fa-solid fa-sliders ml-1.5"></i> إعدادات الحساب
+          </button>
+        </div>
+
+        <!-- TAB 1: ATTENDANCE LOGS -->
+        <div id="admin-tab-attendance" class="admin-tab-content active space-y-4">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <h4 class="text-sm font-bold text-slate-900">سجلات الحضور واحتساب الوقت</h4>
+            <div class="flex items-center gap-2 w-full sm:w-auto">
+              <select id="admin-employee-filter-select" class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-medium focus:outline-none focus:border-brand-500 cursor-pointer">
+                <option value="ALL">📋 جميع الموظفين</option>
+              </select>
+              <input type="text" id="attendance-search-input" placeholder="بحث باسم الموظف..." class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 w-full sm:w-48 focus:outline-none focus:border-brand-500">
+              <button id="refresh-admin-attendance" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors shrink-0">
+                <i class="fa-solid fa-rotate-right"></i>
+              </button>
+            </div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+              <thead>
+                <tr class="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+                  <th class="py-3 px-4">الموظف</th>
+                  <th class="py-3 px-4">التاريخ</th>
+                  <th class="py-3 px-4">وقت الحضور</th>
+                  <th class="py-3 px-4">وقت الانصراف</th>
+                  <th class="py-3 px-4">سبب التأخير</th>
+                  <th class="py-3 px-4">العجز</th>
+                  <th class="py-3 px-4">الوقت الإضافي</th>
+                  <th class="py-3 px-4">الحالة</th>
+                </tr>
+              </thead>
+              <tbody id="admin-attendance-tbody" class="divide-y divide-slate-100 text-slate-700">
+                <!-- Dynamic Rows -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TAB 2: EMPLOYEE MANAGEMENT -->
+        <div id="admin-tab-employees" class="admin-tab-content hidden space-y-4">
+          <div class="flex justify-between items-center">
+            <h4 class="text-sm font-bold text-slate-900">الموظفون المسجلون وورديات العمل</h4>
+            <button id="open-add-employee-modal" class="bg-brand-600 hover:bg-brand-700 text-white px-3.5 py-2 rounded-xl text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors">
+              <i class="fa-solid fa-plus"></i>
+              <span>إضافة موظف جديد</span>
+            </button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+              <thead>
+                <tr class="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+                  <th class="py-3 px-4">الكود</th>
+                  <th class="py-3 px-4">الاسم الثلاثي</th>
+                  <th class="py-3 px-4">اسم المستخدم</th>
+                  <th class="py-3 px-4">كلمة المرور</th>
+                  <th class="py-3 px-4">بداية الورقية</th>
+                  <th class="py-3 px-4">نهاية الورقية</th>
+                  <th class="py-3 px-4">الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody id="admin-employees-tbody" class="divide-y divide-slate-100 text-slate-700">
+                <!-- Dynamic Rows -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TAB 3: DEVICE AUTHORIZATION -->
+        <div id="admin-tab-devices" class="admin-tab-content hidden space-y-4">
+          <div class="flex justify-between items-center">
+            <div>
+              <h4 class="text-sm font-bold text-slate-900">إدارة اعتماد الأجهزة (Device Authorization)</h4>
+              <p class="text-xs text-slate-500">يقتصر استخدام النظام على الأجهزة المعتمدة فقط</p>
+            </div>
+            <button id="refresh-devices-btn" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors">
+              <i class="fa-solid fa-rotate-right"></i>
+            </button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+              <thead>
+                <tr class="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+                  <th class="py-3 px-4">معرّف الجهاز (UUID)</th>
+                  <th class="py-3 px-4">وصف الجهاز</th>
+                  <th class="py-3 px-4">تاريخ التسجيل</th>
+                  <th class="py-3 px-4">الحالة</th>
+                  <th class="py-3 px-4">الإجراء</th>
+                </tr>
+              </thead>
+              <tbody id="admin-devices-tbody" class="divide-y divide-slate-100 text-slate-700">
+                <!-- Dynamic Rows -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TAB 4: SEND NOTIFICATIONS & REWARDS -->
+        <div id="admin-tab-notifications" class="admin-tab-content hidden max-w-xl">
+          <h4 class="text-sm font-bold text-slate-900 mb-4">إرسال تنبيه أو تحذير أو مكافأة مالية</h4>
+          <form id="send-notification-form" class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">الموظف المستهدف</label>
+                <select id="notif-employee-select" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-brand-500">
+                  <option value="ALL">جميع الموظفين</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">نوع الإشعار</label>
+                <select id="notif-type-select" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-brand-500">
+                  <option value="ALERT">📢 تنبيه عام (Alert)</option>
+                  <option value="WARNING">⚠️ إنذار / تحذير (Warning)</option>
+                  <option value="REWARD">💰 مكافأة مالية (Reward)</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">عنوان الإشعار</label>
+              <input type="text" id="notif-title-input" placeholder="عنوان التنبيه..." required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-brand-500">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">نص الرسالة</label>
+              <textarea id="notif-message-input" rows="3" placeholder="تفاصيل الإشعار..." required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-brand-500"></textarea>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">المبلغ المالي (إن وجد)</label>
+              <input type="number" id="notif-amount-input" placeholder="0" min="0" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-brand-500">
+            </div>
+            <button type="submit" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-2.5 px-4 rounded-xl text-xs shadow-xs transition-colors flex items-center justify-center gap-2">
+              <i class="fa-solid fa-paper-plane"></i>
+              <span>إرسال الإشعار</span>
+            </button>
+          </form>
+        </div>
+
+        <!-- TAB 5: ADMIN ACCOUNT SETTINGS -->
+        <div id="admin-tab-settings" class="admin-tab-content hidden max-w-md">
+          <h4 class="text-sm font-bold text-slate-900 mb-4">إعدادات حساب المدير</h4>
+          <form id="admin-settings-form" class="space-y-4">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">اسم العرض (Display Name)</label>
+              <input type="text" id="setting-display-name" required placeholder="مدير النظام" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-brand-500">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">اسم المستخدم الحالي</label>
+                <input type="text" id="setting-current-username" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-brand-500">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">كلمة المرور الحالية</label>
+                <input type="password" id="setting-current-password" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-brand-500">
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">اسم جديد (اختياري)</label>
+                <input type="text" id="setting-new-username" placeholder="اسم مستخدم جديد" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-brand-500">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">كلمة سر جديدة (اختياري)</label>
+                <input type="password" id="setting-new-password" placeholder="كلمة مرور جديدة" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-brand-500">
+              </div>
+            </div>
+            <button type="submit" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-2.5 px-4 rounded-xl text-xs shadow-xs transition-colors flex items-center justify-center gap-2">
+              <i class="fa-solid fa-floppy-disk"></i>
+              <span>حفظ التغييرات</span>
+            </button>
+          </form>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MODAL: ADD / EDIT EMPLOYEE -->
+  <div id="employee-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl p-6 max-w-md w-full border border-slate-100 shadow-2xl">
+      <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
+        <h3 id="emp-modal-title" class="text-sm font-bold text-slate-900">إضافة موظف جديد</h3>
+        <button class="text-slate-400 hover:text-slate-600 text-lg font-bold" data-close="employee-modal">&times;</button>
+      </div>
+      <form id="employee-form" class="space-y-3">
+        <input type="hidden" id="emp-form-id">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">الاسم الثلاثي</label>
+          <input type="text" id="emp-form-name" placeholder="اسم الموظف الكامل" required class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-brand-500">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">اسم المستخدم</label>
+            <input type="text" id="emp-form-username" placeholder="Username" required class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-brand-500">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">كلمة المرور</label>
+            <input type="text" id="emp-form-password" placeholder="Password" required class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-brand-500">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">بداية الورقية</label>
+            <input type="time" id="emp-form-shift-start" value="08:00" required class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-brand-500">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">نهاية الورقية</label>
+            <input type="time" id="emp-form-shift-end" value="16:00" required class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-brand-500">
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 pt-4">
+          <button type="button" data-close="employee-modal" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold">إلغاء</button>
+          <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-semibold">حفظ</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-400">
+    نظام الحضور والانصراف الذكي &copy; 2026 | مدعوم بنظام Google Sheets Backend
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
