@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>تسجيل الدخول | نظام الحضور والانصراف الذكي</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="auth-wrapper">
+    <div style="position: absolute; top: 20px; left: 20px;">
+      <button id="theme-toggle-btn" class="theme-toggle-btn">☀️ المظهر الفاتح</button>
+    </div>
+    <div class="glass-card auth-card">
+      <div class="auth-header">
+        <div class="logo-section" style="justify-content: center; margin-bottom: 20px;">
+          <div class="logo-icon">🕒</div>
+          <div class="logo-text">نظام الحضور والانصراف</div>
+        </div>
+        <h1>مرحباً بك</h1>
+        <p>يرجى إدخال اسم المستخدم ورمز المرور لتسجيل الدخول</p>
+      </div>
+
+      <form id="login-form">
+        <div class="form-group">
+          <label for="username">اسم المستخدم:</label>
+          <input type="text" id="username" class="form-control" placeholder="مثال: ahmed أو admin" required autofocus autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="password">رمز المرور:</label>
+          <input type="password" id="password" class="form-control" placeholder="رمز المرور الخاص بك" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">تسجيل الدخول</button>
+      </form>
+
+      <div style="margin-top: 20px; text-align: center; font-size: 12px; color: var(--text-muted);">
+        🔒 نظام آمن ومقيد بحواسيب الشركة المعتمدة فقط (حتى 3 أجهزة).
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-el" class="toast">
+    <span id="toast-text"></span>
+  </div>
+
+  <!-- Firebase Web SDK v10 (Compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/firebase_client.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      checkActiveSession();
+    });
+  </script>
+</body>
+</html>
