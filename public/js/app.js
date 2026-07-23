@@ -107,13 +107,38 @@ async function sendApiRequest(action, payload = {}, pathUrl = '', method = 'GET'
     return null;
   }
 
-  // 1. Firebase Integration (Data import strictly from Firebase, Write operations synced to Google Sheets as backup)
+  // 1. Firebase Integration (Strict Firebase Reads with Auto-Import from Google Sheets when empty, plus dual cloud backup writes)
   if (hasFirebase) {
     var resData = null;
     switch (action) {
-      // READ / IMPORT OPERATIONS (Firebase Only)
+      case 'get_me': {
+        const activeUser = JSON.parse(sessionStorage.getItem('time_user') || 'null');
+        if (activeUser && activeUser.role) {
+          resData = { success: true, role: activeUser.role, name: activeUser.name, user: activeUser };
+        } else {
+          resData = { success: false, message: 'غير مسجل الدخول' };
+        }
+        break;
+      }
+
       case 'login':
         resData = await fbLogin(payload.username, payload.password);
+        if ((!resData || !resData.success) && hasGoogleScript) {
+          const gsRes = await callGoogleScript();
+          if (gsRes && (gsRes.success || gsRes.role)) {
+            if (gsRes.user && typeof fbCreateEmployee === 'function') {
+              fbCreateEmployee({
+                id: gsRes.user.id || gsRes.user.ID,
+                name: gsRes.user.name || gsRes.user.Name,
+                username: payload.username,
+                password: payload.password,
+                shift_start: gsRes.user.shift_start || gsRes.user.ShiftStart || '08:00',
+                shift_end: gsRes.user.shift_end || gsRes.user.ShiftEnd || '17:00'
+              }).catch(function() {});
+            }
+            return { ok: true, ...gsRes };
+          }
+        }
         break;
 
       case 'device_status':
@@ -122,29 +147,80 @@ async function sendApiRequest(action, payload = {}, pathUrl = '', method = 'GET'
 
       case 'my_logs':
         resData = await fbGetMyLogs(payload.userId);
+        if ((!resData || resData.length === 0) && hasGoogleScript) {
+          const gsRes = await callGoogleScript();
+          if (gsRes && Array.isArray(gsRes) && gsRes.length > 0) return gsRes;
+          if (gsRes && Array.isArray(gsRes.data) && gsRes.data.length > 0) return gsRes.data;
+        }
         break;
 
       case 'my_notifications':
         resData = await fbGetMyNotifications(payload.userId);
+        if ((!resData || resData.length === 0) && hasGoogleScript) {
+          const gsRes = await callGoogleScript();
+          if (gsRes && Array.isArray(gsRes) && gsRes.length > 0) return gsRes;
+          if (gsRes && Array.isArray(gsRes.data) && gsRes.data.length > 0) return gsRes.data;
+        }
         break;
 
       case 'admin_employees':
         resData = await fbGetAdminEmployees();
+        if ((!resData || resData.length === 0) && hasGoogleScript) {
+          const gsRes = await callGoogleScript();
+          if (gsRes) {
+            const list = Array.isArray(gsRes) ? gsRes : (gsRes.users || gsRes.employees || []);
+            if (list && list.length > 0) {
+              list.forEach(emp => {
+                if (typeof fbCreateEmployee === 'function') {
+                  fbCreateEmployee({
+                    id: emp.id || emp.ID,
+                    name: emp.name || emp.Name,
+                    username: emp.username || emp.Username,
+                    password: emp.password || emp.Password || '123456',
+                    shift_start: emp.shift_start || emp.ShiftStart || '08:00',
+                    shift_end: emp.shift_end || emp.ShiftEnd || '17:00'
+                  }).catch(function() {});
+                }
+              });
+              return list;
+            }
+          }
+        }
         break;
 
       case 'admin_attendance':
         resData = await fbGetAdminAttendance();
+        if ((!resData || resData.length === 0) && hasGoogleScript) {
+          const gsRes = await callGoogleScript();
+          if (gsRes) {
+            const list = Array.isArray(gsRes) ? gsRes : (gsRes.attendance || gsRes.logs || []);
+            if (list && list.length > 0) return list;
+          }
+        }
         break;
 
       case 'admin_notifications_list':
         resData = await fbGetAdminNotifications();
+        if ((!resData || resData.length === 0) && hasGoogleScript) {
+          const gsRes = await callGoogleScript();
+          if (gsRes) {
+            const list = Array.isArray(gsRes) ? gsRes : (gsRes.notifications || []);
+            if (list && list.length > 0) return list;
+          }
+        }
         break;
 
       case 'admin_devices':
         resData = await fbGetAuthorizedDevices();
+        if ((!resData || resData.length === 0) && hasGoogleScript) {
+          const gsRes = await callGoogleScript();
+          if (gsRes) {
+            const list = Array.isArray(gsRes) ? gsRes : (gsRes.devices || []);
+            if (list && list.length > 0) return list;
+          }
+        }
         break;
 
-      // WRITE / STORAGE OPERATIONS (Dual Cloud Sync: Firebase + Google Sheets Backup)
       case 'authorize_device':
         resData = await fbAuthorizeDevice(payload.name, payload.password);
         if (hasGoogleScript) callGoogleScript();
@@ -237,20 +313,24 @@ async function checkActiveSession() {
   try {
     const devStatus = await sendApiRequest('device_status', {}, '/api/device/status');
     if (devStatus && devStatus.authorized === false) {
-      if (!window.location.pathname.endsWith('unauthorized.html')) {
+      if (!window.location.pathname.includes('unauthorized.html')) {
         window.location.href = 'unauthorized.html';
         return;
       }
     }
 
     const activeUser = JSON.parse(sessionStorage.getItem('time_user') || 'null');
+    const path = window.location.pathname;
     if (activeUser && activeUser.role) {
       if (activeUser.role === 'admin') {
-        if (!window.location.pathname.endsWith('admin.html')) window.location.href = 'admin.html';
+        if (!path.includes('admin.html')) window.location.href = 'admin.html';
       } else {
-        if (!window.location.pathname.endsWith('employee.html')) window.location.href = 'employee.html';
+        if (!path.includes('employee.html')) window.location.href = 'employee.html';
       }
-      return;
+    } else {
+      if (path.includes('admin.html') || path.includes('employee.html')) {
+        window.location.href = '/';
+      }
     }
   } catch (err) {
     console.error('Device/Session check error:', err);
