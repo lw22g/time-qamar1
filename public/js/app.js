@@ -81,62 +81,12 @@ async function sendApiRequest(action, payload = {}, pathUrl = '', method = 'GET'
     payload.device_token = deviceToken;
   }
 
-  // 1. Firebase Integration (if configured)
-  if (typeof firebaseConfig !== 'undefined' && firebaseConfig.projectId && typeof fbLogin === 'function') {
-    var resData = null;
-    switch (action) {
-      case 'login': resData = await fbLogin(payload.username, payload.password); break;
-      case 'device_status': resData = await fbCheckDeviceStatus(); break;
-      case 'authorize_device': resData = await fbAuthorizeDevice(payload.name, payload.password); break;
-      case 'check_in': resData = await fbCheckIn(payload.userId); break;
-      case 'check_out': resData = await fbCheckOut(payload.userId); break;
-      case 'my_logs': resData = await fbGetMyLogs(payload.userId); break;
-      case 'my_notifications': resData = await fbGetMyNotifications(payload.userId); break;
-      case 'admin_employees': resData = await fbGetAdminEmployees(); break;
-      case 'create_employee': resData = await fbCreateEmployee(payload); break;
-      case 'update_employee': resData = await fbUpdateEmployee(payload); break;
-      case 'delete_employee': resData = await fbDeleteEmployee(payload.id); break;
-      case 'admin_attendance': resData = await fbGetAdminAttendance(); break;
-      case 'send_notification': resData = await fbSendNotification(payload); break;
-      case 'admin_notifications_list': resData = await fbGetAdminNotifications(); break;
-      case 'admin_devices': resData = await fbGetAuthorizedDevices(); break;
-      case 'revoke_device': resData = await fbRevokeDevice(payload.token); break;
-      case 'change_admin_password': resData = await fbChangeAdminCredentials(payload); break;
-      default: break;
-    }
-    if (resData !== null && resData !== undefined) return { ok: resData.success !== false, ...resData };
-  }
+  const hasFirebase = (typeof firebaseConfig !== 'undefined' && firebaseConfig.projectId && typeof fbLogin === 'function');
+  const hasGoogleScript = (typeof GOOGLE_SCRIPT_URL !== 'undefined' && GOOGLE_SCRIPT_URL && GOOGLE_SCRIPT_URL.trim() !== '');
 
-  // 2. Supabase Integration (if configured)
-  if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL && SUPABASE_URL.includes('.supabase.co') && !SUPABASE_URL.includes('YOUR_SUPABASE')) {
-    if (typeof dbLogin === 'function') {
-      var resData = null;
-      switch (action) {
-        case 'login': resData = await dbLogin(payload.username, payload.password); break;
-        case 'device_status': resData = await dbCheckDeviceStatus(); break;
-        case 'authorize_device': resData = await dbAuthorizeDevice(payload.name, payload.password); break;
-        case 'check_in': resData = await dbCheckIn(payload.userId); break;
-        case 'check_out': resData = await dbCheckOut(payload.userId); break;
-        case 'my_logs': resData = await dbGetMyLogs(payload.userId); break;
-        case 'my_notifications': resData = await dbGetMyNotifications(payload.userId); break;
-        case 'admin_employees': resData = await dbGetAdminEmployees(); break;
-        case 'create_employee': resData = await dbCreateEmployee(payload); break;
-        case 'update_employee': resData = await dbUpdateEmployee(payload); break;
-        case 'delete_employee': resData = await dbDeleteEmployee(payload.id); break;
-        case 'admin_attendance': resData = await dbGetAdminAttendance(); break;
-        case 'send_notification': resData = await dbSendNotification(payload); break;
-        case 'admin_notifications_list': resData = await dbGetAdminNotifications(); break;
-        case 'admin_devices': resData = await dbGetAuthorizedDevices(); break;
-        case 'revoke_device': resData = await dbRevokeDevice(payload.token); break;
-        case 'change_admin_password': resData = await dbChangeAdminCredentials(payload); break;
-        default: break;
-      }
-      if (resData !== null && resData !== undefined) return { ok: resData.success !== false, ...resData };
-    }
-  }
-
-  // 2. Google Apps Script Webhook (if configured and reachable)
-  if (typeof GOOGLE_SCRIPT_URL !== 'undefined' && GOOGLE_SCRIPT_URL && GOOGLE_SCRIPT_URL.trim() !== '') {
+  // Helper to query Google Apps Script Webhook
+  async function callGoogleScript() {
+    if (!hasGoogleScript) return null;
     const activeUser = JSON.parse(sessionStorage.getItem('time_user') || 'null');
     if (activeUser) {
       if (!payload.userId) payload.userId = activeUser.id;
@@ -149,14 +99,183 @@ async function sendApiRequest(action, payload = {}, pathUrl = '', method = 'GET'
         body: JSON.stringify({ action, payload })
       });
       if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          return data;
-        }
-        return { ok: data.success !== false, ...data };
+        return await res.json();
       }
     } catch (fetchErr) {
-      console.warn('Google Script fetch warning, trying local API fallback:', fetchErr);
+      console.warn('Google Script fetch warning:', fetchErr);
+    }
+    return null;
+  }
+
+  // 1. Firebase Integration with Google Sheets Hybrid Fallback & Auto-Sync
+  if (hasFirebase) {
+    var resData = null;
+    switch (action) {
+      case 'login':
+        resData = await fbLogin(payload.username, payload.password);
+        if ((!resData || !resData.success) && hasGoogleScript) {
+          const gsRes = await callGoogleScript();
+          if (gsRes && (gsRes.success || gsRes.role)) {
+            if (gsRes.user && gsRes.role === 'employee' && typeof fbCreateEmployee === 'function') {
+              fbCreateEmployee({
+                id: gsRes.user.id || gsRes.user.ID,
+                name: gsRes.user.name || gsRes.user.Name,
+                username: payload.username,
+                password: payload.password,
+                shift_start: gsRes.user.shift_start || gsRes.user.ShiftStart || '08:00',
+                shift_end: gsRes.user.shift_end || gsRes.user.ShiftEnd || '17:00'
+              }).catch(function(e) { console.log('FB sync note:', e); });
+            }
+            return { ok: true, ...gsRes };
+          }
+        }
+        break;
+
+      case 'device_status':
+        resData = await fbCheckDeviceStatus();
+        if ((!resData || resData.authorized === false) && hasGoogleScript) {
+          const gsRes = await callGoogleScript();
+          if (gsRes) resData = gsRes;
+        }
+        break;
+
+      case 'authorize_device':
+        resData = await fbAuthorizeDevice(payload.name, payload.password);
+        if (hasGoogleScript) callGoogleScript();
+        break;
+
+      case 'check_in':
+        resData = await fbCheckIn(payload.userId);
+        if (hasGoogleScript) callGoogleScript();
+        break;
+
+      case 'check_out':
+        resData = await fbCheckOut(payload.userId);
+        if (hasGoogleScript) callGoogleScript();
+        break;
+
+      case 'my_logs':
+        resData = await fbGetMyLogs(payload.userId);
+        if ((!resData || resData.length === 0) && hasGoogleScript) {
+          const gsRes = await callGoogleScript();
+          if (gsRes && Array.isArray(gsRes) && gsRes.length > 0) return gsRes;
+          if (gsRes && Array.isArray(gsRes.data) && gsRes.data.length > 0) return gsRes.data;
+        }
+        break;
+
+      case 'my_notifications':
+        resData = await fbGetMyNotifications(payload.userId);
+        if ((!resData || resData.length === 0) && hasGoogleScript) {
+          const gsRes = await callGoogleScript();
+          if (gsRes && Array.isArray(gsRes) && gsRes.length > 0) return gsRes;
+          if (gsRes && Array.isArray(gsRes.data) && gsRes.data.length > 0) return gsRes.data;
+        }
+        break;
+
+      case 'admin_employees':
+        resData = await fbGetAdminEmployees();
+        if ((!resData || resData.length === 0) && hasGoogleScript) {
+          const gsRes = await callGoogleScript();
+          if (gsRes) {
+            const list = Array.isArray(gsRes) ? gsRes : (gsRes.users || gsRes.employees || []);
+            if (list && list.length > 0) {
+              list.forEach(emp => {
+                if (typeof fbCreateEmployee === 'function') {
+                  fbCreateEmployee({
+                    id: emp.id || emp.ID,
+                    name: emp.name || emp.Name,
+                    username: emp.username || emp.Username,
+                    password: emp.password || emp.Password || '123456',
+                    shift_start: emp.shift_start || emp.ShiftStart || '08:00',
+                    shift_end: emp.shift_end || emp.ShiftEnd || '17:00'
+                  }).catch(function() {});
+                }
+              });
+              return list;
+            }
+          }
+        }
+        break;
+
+      case 'create_employee':
+        resData = await fbCreateEmployee(payload);
+        if (hasGoogleScript) callGoogleScript();
+        break;
+
+      case 'update_employee':
+        resData = await fbUpdateEmployee(payload);
+        if (hasGoogleScript) callGoogleScript();
+        break;
+
+      case 'delete_employee':
+        resData = await fbDeleteEmployee(payload.id);
+        if (hasGoogleScript) callGoogleScript();
+        break;
+
+      case 'admin_attendance':
+        resData = await fbGetAdminAttendance();
+        if ((!resData || resData.length === 0) && hasGoogleScript) {
+          const gsRes = await callGoogleScript();
+          if (gsRes) {
+            const list = Array.isArray(gsRes) ? gsRes : (gsRes.attendance || gsRes.logs || []);
+            if (list && list.length > 0) return list;
+          }
+        }
+        break;
+
+      case 'send_notification':
+        resData = await fbSendNotification(payload);
+        if (hasGoogleScript) callGoogleScript();
+        break;
+
+      case 'admin_notifications_list':
+        resData = await fbGetAdminNotifications();
+        if ((!resData || resData.length === 0) && hasGoogleScript) {
+          const gsRes = await callGoogleScript();
+          if (gsRes) {
+            const list = Array.isArray(gsRes) ? gsRes : (gsRes.notifications || []);
+            if (list && list.length > 0) return list;
+          }
+        }
+        break;
+
+      case 'admin_devices':
+        resData = await fbGetAuthorizedDevices();
+        if ((!resData || resData.length === 0) && hasGoogleScript) {
+          const gsRes = await callGoogleScript();
+          if (gsRes) {
+            const list = Array.isArray(gsRes) ? gsRes : (gsRes.devices || []);
+            if (list && list.length > 0) return list;
+          }
+        }
+        break;
+
+      case 'revoke_device':
+        resData = await fbRevokeDevice(payload.token);
+        if (hasGoogleScript) callGoogleScript();
+        break;
+
+      case 'change_admin_password':
+        resData = await fbChangeAdminCredentials(payload);
+        if (hasGoogleScript) callGoogleScript();
+        break;
+
+      default:
+        break;
+    }
+
+    if (resData !== null && resData !== undefined) {
+      if (Array.isArray(resData)) return resData;
+      return { ok: resData.success !== false, ...resData };
+    }
+  }
+
+  // 2. Google Apps Script Webhook Fallback
+  if (hasGoogleScript) {
+    const gsRes = await callGoogleScript();
+    if (gsRes !== null) {
+      if (Array.isArray(gsRes)) return gsRes;
+      return { ok: gsRes.success !== false, ...gsRes };
     }
   }
 

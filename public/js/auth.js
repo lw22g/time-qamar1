@@ -27,9 +27,36 @@ async function sendApiRequest(action, payload = {}, pathUrl = '') {
     payload.device_token = deviceToken;
   }
 
-  if (typeof firebaseConfig !== 'undefined' && firebaseConfig.projectId && typeof fbCheckDeviceStatus === 'function') {
-    if (action === 'device_status') return await fbCheckDeviceStatus();
-    if (action === 'authorize_device') return await fbAuthorizeDevice(payload.name, payload.password);
+  const hasFirebase = (typeof firebaseConfig !== 'undefined' && firebaseConfig.projectId && typeof fbCheckDeviceStatus === 'function');
+  const hasGoogleScript = (typeof GOOGLE_SCRIPT_URL !== 'undefined' && GOOGLE_SCRIPT_URL && GOOGLE_SCRIPT_URL.trim() !== '');
+
+  if (hasFirebase) {
+    if (action === 'device_status') {
+      var status = await fbCheckDeviceStatus();
+      if (status && status.authorized) return status;
+      if (hasGoogleScript) {
+        try {
+          const res = await fetch(GOOGLE_SCRIPT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ action, payload })
+          });
+          return await res.json();
+        } catch (e) {}
+      }
+      return status;
+    }
+    if (action === 'authorize_device') {
+      var resFB = await fbAuthorizeDevice(payload.name, payload.password);
+      if (hasGoogleScript) {
+        fetch(GOOGLE_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action, payload })
+        }).catch(function(e) {});
+      }
+      return resFB;
+    }
   }
 
   if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL && SUPABASE_URL.includes('.supabase.co') && !SUPABASE_URL.includes('YOUR_SUPABASE')) {
