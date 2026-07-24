@@ -431,6 +431,7 @@ function setupEventListeners() {
     document.getElementById('emp-modal-title').innerHTML = '<i class="fa-solid fa-user-plus ml-1"></i> إضافة موظف جديد';
     document.getElementById('employee-form').reset();
     document.getElementById('emp-form-id').value = '';
+    renderWeeklyScheduleForm([], '08:00', '16:00');
     showModal('employee-modal');
   });
 
@@ -456,6 +457,12 @@ function setupEventListeners() {
 
     const res = await callApi(action, payload);
     if (res && res.success) {
+      const empId = res.employeeId || id;
+      const weeklySchedule = getWeeklyScheduleFromForm();
+      if (empId && weeklySchedule.length > 0) {
+        await callApi('saveWeeklySchedule', { employeeId: empId, schedule: weeklySchedule });
+      }
+
       showToast(res.message, 'success');
       hideModal('employee-modal');
       loadAdminEmployees();
@@ -587,13 +594,24 @@ async function loadEmployeeDashboard() {
   showScreen('employee-dashboard');
   
   const emp = state.currentUser;
-  document.getElementById('emp-shift-times').textContent = `${emp.shiftStart || '08:00'} - ${emp.shiftEnd || '16:00'}`;
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  // Fetch today's day-specific shift schedule
+  const todayShift = await callApi('getShiftForDate', { employeeId: emp.id, dateStr: todayStr });
+  if (todayShift && todayShift.success) {
+    if (todayShift.isOff) {
+      document.getElementById('emp-shift-times').textContent = `🌴 اليوم عطلة أسبوعية (${todayShift.dayName})`;
+    } else {
+      document.getElementById('emp-shift-times').textContent = `${todayShift.shiftStart} - ${todayShift.shiftEnd} (${todayShift.dayName})`;
+    }
+  } else {
+    document.getElementById('emp-shift-times').textContent = `${emp.shiftStart || '08:00'} - ${emp.shiftEnd || '16:00'}`;
+  }
 
   // Fetch Attendance History & Check Today's status
   const logsRes = await callApi('getAttendanceLogs', { employeeId: emp.id });
   const logs = (logsRes && logsRes.logs) ? logsRes.logs : [];
   
-  const todayStr = new Date().toISOString().split('T')[0];
   const todayLog = logs.find(l => l.date === todayStr);
 
   const btnCheckin = document.getElementById('btn-checkin');
@@ -798,11 +816,11 @@ function renderEmployeesTable(employees) {
   document.getElementById('stat-total-employees').textContent = employees.length;
 }
 
-window.editEmployee = function(empId) {
+window.editEmployee = async function(empId) {
   const emp = state.employees.find(e => e.id === empId);
   if (!emp) return;
 
-  document.getElementById('emp-modal-title').innerHTML = '<i class="fa-solid fa-user-pen ml-1"></i> تعديل بيانات الموظف';
+  document.getElementById('emp-modal-title').innerHTML = '<i class="fa-solid fa-user-pen ml-1"></i> تعديل بيانات الموظف والجدول';
   document.getElementById('emp-form-id').value = emp.id;
   document.getElementById('emp-form-name').value = emp.name;
   document.getElementById('emp-form-username').value = emp.username;
@@ -810,8 +828,84 @@ window.editEmployee = function(empId) {
   document.getElementById('emp-form-shift-start').value = emp.shiftStart || '08:00';
   document.getElementById('emp-form-shift-end').value = emp.shiftEnd || '16:00';
 
+  // Fetch and render employee's per-day weekly schedule
+  const schedRes = await callApi('getWeeklySchedule', { employeeId: empId });
+  const scheduleData = (schedRes && schedRes.schedule) ? schedRes.schedule : [];
+  renderWeeklyScheduleForm(scheduleData, emp.shiftStart || '08:00', emp.shiftEnd || '16:00');
+
   showModal('employee-modal');
 };
+
+const WEEKDAYS = [
+  { index: 0, name: 'الأحد' },
+  { index: 1, name: 'الإثنين' },
+  { index: 2, name: 'الثلاثاء' },
+  { index: 3, name: 'الأربعاء' },
+  { index: 4, name: 'الخميس' },
+  { index: 5, name: 'الجمعة' },
+  { index: 6, name: 'السبت' }
+];
+
+function renderWeeklyScheduleForm(scheduleData = [], defaultStart = '08:00', defaultEnd = '16:00') {
+  const container = document.getElementById('weekly-schedule-container');
+  if (!container) return;
+
+  container.innerHTML = WEEKDAYS.map(day => {
+    const dayItem = scheduleData.find(s => parseInt(s.dayIndex, 10) === day.index) || {};
+    const startVal = dayItem.shiftStart || defaultStart;
+    const endVal = dayItem.shiftEnd || defaultEnd;
+    const isOff = dayItem.isOff ? true : false;
+
+    return `
+      <div class="flex items-center justify-between gap-2 p-2 bg-white border border-slate-200 rounded-xl text-xs shadow-2xs">
+        <div class="w-16 font-bold text-slate-800 flex items-center gap-1 shrink-0">
+          <span>${day.name}</span>
+        </div>
+        
+        <label class="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer select-none shrink-0 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">
+          <input type="checkbox" id="day-off-${day.index}" ${isOff ? 'checked' : ''} onchange="toggleDayTimeInputs(${day.index})" class="rounded text-brand-600 focus:ring-brand-500 cursor-pointer">
+          <span class="font-medium ${isOff ? 'text-rose-600 font-bold' : ''}">عطلة</span>
+        </label>
+
+        <div class="flex items-center gap-1 ${isOff ? 'opacity-40 pointer-events-none' : ''}" id="day-times-wrap-${day.index}">
+          <input type="time" id="day-start-${day.index}" value="${startVal}" class="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:bg-white focus:outline-none focus:border-brand-500">
+          <span class="text-slate-400 text-xs font-bold">-</span>
+          <input type="time" id="day-end-${day.index}" value="${endVal}" class="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:bg-white focus:outline-none focus:border-brand-500">
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+window.toggleDayTimeInputs = function(dayIndex) {
+  const isOff = document.getElementById(`day-off-${dayIndex}`)?.checked;
+  const wrap = document.getElementById(`day-times-wrap-${dayIndex}`);
+  if (wrap) {
+    if (isOff) {
+      wrap.classList.add('opacity-40', 'pointer-events-none');
+    } else {
+      wrap.classList.remove('opacity-40', 'pointer-events-none');
+    }
+  }
+};
+
+function getWeeklyScheduleFromForm() {
+  const schedule = [];
+  WEEKDAYS.forEach(day => {
+    const isOff = document.getElementById(`day-off-${day.index}`)?.checked || false;
+    const shiftStart = document.getElementById(`day-start-${day.index}`)?.value || '08:00';
+    const shiftEnd = document.getElementById(`day-end-${day.index}`)?.value || '16:00';
+
+    schedule.push({
+      dayIndex: day.index,
+      dayName: day.name,
+      shiftStart: shiftStart,
+      shiftEnd: shiftEnd,
+      isOff: isOff
+    });
+  });
+  return schedule;
+}
 
 window.deleteEmployeePrompt = async function(empId) {
   if (confirm('هل أنت تأكد من حذف هذا الموظف؟')) {
@@ -1090,6 +1184,26 @@ function mockApiHandler(action, payload) {
             }
           } else {
             resolve({ success: false, message: 'الموظف غير موجود' });
+          }
+          break;
+        case 'getWeeklySchedule':
+          if (!mockDb.schedules) mockDb.schedules = {};
+          resolve({ success: true, employeeId: payload.employeeId, schedule: mockDb.schedules[payload.employeeId] || [] });
+          break;
+        case 'saveWeeklySchedule':
+          if (!mockDb.schedules) mockDb.schedules = {};
+          mockDb.schedules[payload.employeeId] = payload.schedule;
+          resolve({ success: true, message: 'تم حفظ جدول الدوام الأسبوعي بنجاح' });
+          break;
+        case 'getShiftForDate':
+          const dIdx = new Date(payload.dateStr || Date.now()).getDay();
+          const dayNames = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+          const userSched = mockDb.schedules?.[payload.employeeId]?.find(s => s.dayIndex === dIdx);
+          if (userSched) {
+            resolve({ success: true, shiftStart: userSched.shiftStart, shiftEnd: userSched.shiftEnd, isOff: userSched.isOff, dayName: dayNames[dIdx] });
+          } else {
+            const eObj = mockDb.employees.find(e => e.id === payload.employeeId);
+            resolve({ success: true, shiftStart: eObj?.shiftStart || '08:00', shiftEnd: eObj?.shiftEnd || '16:00', isOff: false, dayName: dayNames[dIdx] });
           }
           break;
         case 'getPendingDevices':
